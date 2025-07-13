@@ -39,12 +39,12 @@
 }
 
 .filter-group {
-    margin: 0.5vh 0;
+    margin: 0.5vh 0; 
     padding: 10px;
     display: flex;
     flex-direction: column;
     border-radius: 20px;
-    background-color: rgba(255, 255, 255, 0.8);
+    background-color: rgba(255, 255, 255, 0.8); 
     transition: box-shadow 0.3s ease, background-color 0.3s ease;
 }
 
@@ -53,6 +53,7 @@
 }
 
 .filter-group label {
+    font-family:sans-serif;
     margin-bottom: 10px;
     font-size: 1.1rem;
 }
@@ -78,7 +79,7 @@
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    max-width: 300px;
+    max-width: 150px;
     margin: 6px;
 }
 
@@ -128,6 +129,8 @@
 .filter-close-button {
     height: 3vh;
     width: 3vw;
+    position: relative;
+    left: 90%;
     font-size: 2rem;
     color: #000000;
     background: none;
@@ -260,32 +263,45 @@
     background-color: #d72d6e;
     color: white;
 }
+/* Container for the price range section */
+.sliders_control {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+}
 
+/* Slider track */
 .range-slider {
-    height: 5px;
+    height: 6px;
     position: relative;
     background-color: #e1e9f6;
-    border-radius: 2px;
+    border-radius: 3px;
+    margin: 20px 0;
 }
 
+/* Selected range track */
 .range-selected {
     height: 100%;
-    left: 30%;
-    right: 30%;
     position: absolute;
-    border-radius: 5px;
+    border-radius: 3px;
     background-color: #d72d6e;
+    transition: all 0.2s ease;
+    min-width: 10px;
 }
 
+/* Slider inputs */
 .range-input {
     position: relative;
+    margin-bottom: 10px;
 }
 
-.range-input input {
+.range-input input.min-input,
+.range-input input.max-input {
     position: absolute;
     width: 100%;
-    height: 5px;
-    top: -7px;
+    height: 6px;
+    top: -26px;
     background: none;
     cursor: pointer;
     pointer-events: none;
@@ -293,7 +309,8 @@
     -moz-appearance: none;
 }
 
-.range-input input::-webkit-slider-thumb {
+.range-input input.min-input::-webkit-slider-thumb,
+.range-input input.max-input::-webkit-slider-thumb {
     height: 20px;
     width: 20px;
     border-radius: 50%;
@@ -301,35 +318,81 @@
     background-color: #fff;
     pointer-events: auto;
     -webkit-appearance: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease;
 }
 
-.range-input input::-moz-range-thumb {
-    height: 15px;
-    width: 15px;
+.range-input input.min-input::-moz-range-thumb,
+.range-input input.max-input::-moz-range-thumb {
+    height: 20px;
+    width: 20px;
     border-radius: 50%;
     border: 3px solid #d72d6e;
     background-color: #fff;
     pointer-events: auto;
     -moz-appearance: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease;
 }
 
+.range-input input.min-input::-webkit-slider-thumb:hover,
+.range-input input.max-input::-webkit-slider-thumb:hover,
+.range-input input.min-input::-moz-range-thumb:hover,
+.range-input input.max-input::-moz-range-thumb:hover {
+    transform: scale(1.1);
+}
+
+/* Price input fields */
 .range-price {
-    margin: 30px 0;
-    width: 100%;
     display: flex;
     justify-content: center;
     align-items: center;
+    gap: 10px;
+    margin: 20px 0;
 }
 
 .range-price label {
-    margin-right: 5px;
+    font-size: 1rem;
+    font-weight: bold;
+    color: #333;
 }
 
-.range-price input {
-    width: 40px;
-    padding: 5px;
+.range-price input.min-price,
+.range-price input.max-price {
+    width: 60px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 1rem;
+    text-align: center;
+    transition: border-color 0.3s ease-in-out;
 }
 
-.range-price input:first-of-type {
+.range-price input.min-price:focus,
+.range-price input.max-price:focus {
+    border-color: #d72d6e;
+    outline: none;
+}
+
+/* Ensure spacing between min and max inputs */
+.range-price input.min-price {
     margin-right: 15px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 500px) {
+    .sliders_control {
+        max-width: 100%;
+    }
+
+    .range-price input.min-price,
+    .range-price input.max-price {
+        width: 50px;
+        font-size: 0.9rem;
+        padding: 6px;
+    }
+
+    .range-price label {
+        font-size: 0.9rem;
+    }
 }

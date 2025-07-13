@@ -1,64 +1,68 @@
-import React, { useState, useEffect } from 'react';
+// pages/HomePage.jsx
+import React, { useState } from 'react';
 import Navbar from '../../components/Navbar/Navbar';
 import Slider from '../../components/Slider/Slider';
 import FilterMenu from '../../components/FilterMenu/FilterMenu';
-import HomeBlock from '../../components/HomeBlock/HomeBlock';
+import HomeListings from '../../components/HomeListings/HomeListings';
 import './HomePage.css';
 
 const HomePage = () => {
   const [showFilter, setShowFilter] = useState(false);
-  const [rooms, setRooms] = useState([]);
-  const [filteredRooms, setFilteredRooms] = useState([]);
+  const [filters, setFilters] = useState({
+    checkIn: '',
+    days: 1,
+    roomType: 'any',
+    bedrooms: 1,
+    beds: 1,
+    adults: 0,
+    children: 0,
+    minPrice: parseInt(localStorage.getItem('priceMin')) || 500,
+    maxPrice: parseInt(localStorage.getItem('priceMax')) || 9500,
+    selectedTypes: [],
+    selectedLocations: [],
+    selectedAmenities: [],
+    hostGender: 'any',
+    foodPreferences: [],
+    roomSize: 'any',
+    transport: 'Any',
+    searchKeywords: ''
+  });
 
-  useEffect(() => {
-    const fetchRooms = async () => {
-      try {
-        const response = await fetch('/api/rooms');
-        const data = await response.json();
-        if (data.status === "success") {
-          setRooms(data.data);
-          setFilteredRooms(data.data);
-        }
-      } catch (error) {
-        console.error("Error fetching rooms:", error);
-      }
-    };
-    fetchRooms();
-  }, []);
+  const toggleFilterMenu = () => {
+    console.log('Toggling filter menu:', !showFilter);
+    setShowFilter(!showFilter);
+  };
 
-  const applyFilters = (filters) => {
-    // Filter logic here
-    const filtered = rooms.filter(room => {
-      // Implement your filter conditions
-      return true;
-    });
-    setFilteredRooms(filtered);
+  const applyFilters = (newFilters) => {
+    console.log('Applying filters:', newFilters);
+    setFilters(newFilters);
+    setShowFilter(false);
+  };
+
+  const handleSearchChange = (e) => {
+    setFilters(prev => ({ ...prev, searchKeywords: e.target.value }));
   };
 
   return (
     <div className="home-page">
-      <Navbar />
+      <Navbar searchKeywords={filters.searchKeywords} onSearchChange={handleSearchChange} />
       <Slider />
-      <button 
-        className="filter-button" 
-        onClick={() => setShowFilter(!showFilter)}
+      <button
+        id="filter-button"
+        className="filter-button"
+        onClick={toggleFilterMenu}
       >
-        <i className="fa fa-sliders"></i>
+        <i className="fas fa-filter"></i>
         <span>filter</span>
       </button>
-      
       {showFilter && (
-        <FilterMenu 
-          onClose={() => setShowFilter(false)}
+        <FilterMenu
+          onClose={toggleFilterMenu}
           onApply={applyFilters}
+          currentFilters={filters}
         />
       )}
-      
-      <div className="main-home-block">
-        {filteredRooms.map(room => (
-          <HomeBlock key={room._id} room={room} />
-        ))}
-      </div>
+      <HomeListings filters={filters} />
     </div>
   );
 };
