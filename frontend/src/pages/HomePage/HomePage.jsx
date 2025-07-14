@@ -4,6 +4,9 @@ import Navbar from '../../components/Navbar/Navbar';
 import Slider from '../../components/Slider/Slider';
 import FilterMenu from '../../components/FilterMenu/FilterMenu';
 import HomeListings from '../../components/HomeListings/HomeListings';
+import TravelContent from '../../components/travelerContent/travelerContent';
+import MapComponent from '../../components/Map/MapComponent';
+import Footer from '../../components/Footer/Footer';
 import './HomePage.css';
 
 const HomePage = () => {
@@ -63,6 +66,9 @@ const HomePage = () => {
         />
       )}
       <HomeListings filters={filters} />
+      <TravelContent/>
+      <MapComponent/>
+      <Footer/>
     </div>
   );
 };

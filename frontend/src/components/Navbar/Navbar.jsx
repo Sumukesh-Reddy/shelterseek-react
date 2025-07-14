@@ -1,4 +1,3 @@
-// components/Navbar/Navbar.jsx
 import React, { useState } from 'react';
 import './Navbar.css';
 
@@ -59,53 +58,65 @@ const Navbar = ({ searchKeywords, onSearchChange }) => {
         </a>
       </div>
 
-      <div className="traveler">
-        <button id="user-button" onClick={toggleUserMenu}>
+      <div className="traveler" style={{ position: 'relative' }}>
+        <button 
+          id="user-button" 
+          onClick={toggleUserMenu}
+          style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+        >
           <i className="fa fa-user" aria-hidden="true"></i>
+        </button>
+
+        {isUserMenuOpen && (
+          <div className="user-menu">
+            <button
+              className="user-close-btn"
+              onClick={toggleUserMenu}
+            >
+              ×
+            </button>
+            <ul>
+              <li><a href="/profile">Profile</a></li>
+              <li><a href="/history">History</a></li>
+              <li><a href="/loginweb" id="login-button">Login</a></li>
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <div className="menubar">
+        <button 
+          id="menubutton" 
+          onClick={toggleMobileMenu} 
+          style={{ 
+            background: 'none', 
+            border: 'none', 
+            padding: 0, 
+            cursor: 'pointer' 
+          }}
+        >
+          <i className="fa fa-bars"></i>
         </button>
       </div>
 
-      {isUserMenuOpen && (
-        <div id="user-menu" className="user-menu">
+      {isMobileMenuOpen && (
+        <div className="mobile-menu">
           <button
-            id="user-close-btn"
-            className="user-close-btn"
-            onClick={toggleUserMenu}
+            className="close-btn"
+            onClick={toggleMobileMenu}
           >
             ×
           </button>
           <ul>
-            <li><a href="/profile">profile</a></li>
-            <li><a href="/history">history</a></li>
-            <li><a href="/loginweb" id="login-button">login</a></li>
+            <li><a href="/profile">Profile</a></li>
+            <li><a href="/messages">Inbox</a></li>
+            <li><a href="/history">History</a></li>
+            <li><a href="/wishlist">Wish List</a></li>
+            <li><a href="/about">About</a></li>
+            <li><a href="/loginweb">Login</a></li>
           </ul>
         </div>
       )}
-
-      <div className="menubar">
-      <button id="menubutton" onClick={toggleMobileMenu} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-  <i className="fa fa-bars" style={{ fontSize: '2rem', color: '#ec407a' }}></i>
-</button>
-
-      </div>
-
-      <div id="menu" className="menu" style={{ display: isMobileMenuOpen ? 'block' : 'none' }}>
-        <button
-          id="close-btn"
-          className="close-btn"
-          onClick={toggleMobileMenu}
-        >
-          ×
-        </button>
-        <ul>
-          <li><a href="/profile">profile</a></li>
-          <li><a href="/messages">inbox</a></li>
-          <li><a href="/history">history</a></li>
-          <li><a href="/wishlist">Wish List</a></li>
-          <li><a href="/about">about</a></li>
-          <li><a href="/loginweb">login</a></li>
-        </ul>
-      </div>
     </div>
   );
 };

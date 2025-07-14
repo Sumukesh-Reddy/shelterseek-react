@@ -1,8 +1,9 @@
 body {
     margin: 0;
     padding: 0;
-}
-.traveler_navbar {
+  }
+  
+  .traveler_navbar {
     position: relative;
     top: 0;
     background-color: rgba(128, 133, 138, 0.3);
@@ -10,36 +11,36 @@ body {
     display: flex;
     align-items: center;
     box-shadow: -10px 0px 5px rgba(0, 0, 0, 0.5);
-    z-index: 1000; 
-}
-
-#traveler_logo {
+    z-index: 1000;
+  }
+  
+  #traveler_logo {
     position: relative;
     padding-left: 4%;
     margin-right: 4%;
     height: auto;
     width: auto;
-}
-
-#logo-r {
+  }
+  
+  #logo-r {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     color: #d72d6e;
     font-size: x-large;
-}
-
-#logo-s {
+  }
+  
+  #logo-s {
     font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     color: #ec055d;
     font-size: xx-large;
-}
-
-#traveler_searchbar {
+  }
+  
+  #traveler_searchbar {
     display: flex;
     align-items: center;
     margin-left: 5vw;
-}
-
-#traveler_searchbar input {
+  }
+  
+  #traveler_searchbar input {
     text-align: center;
     border-radius: 25px;
     height: 4vh;
@@ -48,13 +49,13 @@ body {
     font-family: Arial, Helvetica, sans-serif;
     border: 2px solid transparent;
     outline: none;
-}
-
-#traveler_searchbar input:hover {
+  }
+  
+  #traveler_searchbar input:hover {
     border: 2px solid gold;
-}
-
-#traveler_searchbar button {
+  }
+  
+  #traveler_searchbar button {
     cursor: pointer;
     border: none;
     background-color: gold;
@@ -65,311 +66,178 @@ body {
     justify-content: center;
     border-radius: 25px;
     margin-left: 1%;
-}
-
-#traveler_searchbar button:hover {
+  }
+  
+  #traveler_searchbar button:hover {
     border: 2px solid rgb(245, 232, 155);
+  }
+  
+  /* User Menu Styles */
+  
+  .user-menu {
+    transition: color 0.3s ease;
+    border-radius: 20px;
+    position: fixed;
+    right: 2vw;
+    top: 8vh;
+    background-color: rgba(230, 230, 230, 0.8);
+    width: 200px;
+    height: 40%;
+    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.5);
 }
 
-@media (min-width: 1005px )  {
-    #search-button {
-        font-size: 18px;
-        color: #2b2628;
-    }
-    .menubar{
-        display: none;
-    }
-    .cart a{
-        position: relative;
-        margin-left: 5vw;
-        font-size: x-large;
-        color: black;
-        text-decoration:none; 
-        transition: all 0.3s ease;
-    }
-    .cart a:hover{
-        color: #d72d6e;
-    }
+.user-menu ul {
+    transition: color 0.3s ease;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
 
-    .about a{
-        position: relative;
-        margin-left: 5vw;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        font-size: x-large;
-        text-decoration: none; 
-        color: black;  
-        transition: all 0.3s ease; 
-    }
-    .about a:hover{
-        color: #d72d6e;
-    }
-    .inbox{
-        position: relative;
-        margin-left: 5vw;
-        font-size: x-large;
-        cursor: pointer;   
-    }
+.user-menu ul li {
+    transition: color 0.3s ease;
+    padding: 15px;
+    text-align: center;
+}
 
-    .inbox:hover{
-        color: #d72d6e;
-        transition: color 0.3s ease;
-    }
-    #i-inbox{
-        color: rgb(50, 50, 50);
-    }
+.user-menu ul li a {
+    transition: color 0.3s ease;
+    text-decoration: none;
+    color: black;
+    font-size: 1.2rem;
+}
 
-    #i-inbox:hover{
-        color: #d72d6e;
-        transition: color 0.3s ease;
+.user-menu ul li a:hover{
+    color: white;
+}
+
+.user-menu ul li:hover {
+    background-color: #d72d6e;
+}
+.user-close-btn {
+    height: 3vh;  
+    width: 3vw;   
+    font-size: 2rem; 
+    color: black;
+    background: none;
+    border: none;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.user-close-btn:hover {
+    color: #d72d6e; 
+}
+
+  
+  /* Mobile Menu Styles */
+  .mobile-menu {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 250px;
+    height: 100vh;
+    background-color: white;
+    box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+    z-index: 1001;
+    padding: 20px;
+  }
+  
+  .mobile-menu ul {
+    list-style: none;
+    padding: 0;
+    margin-top: 40px;
+  }
+  
+  .mobile-menu li {
+    padding: 12px 0;
+  }
+  
+  .mobile-menu a {
+    text-decoration: none;
+    color: #333;
+    font-size: 1.1rem;
+  }
+  
+  .close-btn {
+    position: absolute;
+    right: 20px;
+    top: 20px;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+  }
+  
+  /* Desktop Styles */
+  @media (min-width: 1005px) {
+    .menubar, .mobile-menu {
+      display: none;
     }
+    
+    .cart a, .about a {
+      margin-left: 5vw;
+      font-size: x-large;
+      color: black;
+      text-decoration: none;
+      transition: all 0.3s ease;
+    }
+    
+    .cart a:hover, .about a:hover {
+      color: #d72d6e;
+    }
+    
+    .inbox {
+      margin-left: 5vw;
+      font-size: x-large;
+    }
+    
+    #i-inbox {
+      color: rgb(50, 50, 50);
+    }
+    
+    #i-inbox:hover {
+      color: #d72d6e;
+    }
+    
     #user-button {
-        transition: color 0.3s ease;
-        background: none;    
-        border: none;        
-        padding: 0;          
-        cursor: pointer;   
-        outline: none;   
-        position: relative;
-        margin-left: 5vw;
-        font-size: xx-large;
-        color: rgb(66, 64, 64);
-    }
-
-    #user-button:hover{
-        color: #d72d6e;
-    }
-
-    #help-icon {
-        font-size: 3rem;
-    }
-    .menu{
-        display: none;
-    }
-    #menu{
-    display: none;
-    }
-    .menu ul{
-        display: none;
-    }
-    .menu button{
-        display: none;
-    }
-
-    .user-menu {
-        transition: color 0.3s ease;
-        display: none;
-        border-radius: 20px;
-        position: fixed;
-        right: 2vw;
-        top: 8vh;
-        background-color: rgba(230, 230, 230, 0.8);
-        width: 200px;
-        height: 60%;
-        box-shadow: -2px 0 5px rgba(0, 0, 0, 0.5);
+      margin-left: 5vw;
+      font-size: xx-large;
+      color: rgb(66, 64, 64);
     }
     
-    .user-menu ul {
-        transition: color 0.3s ease;
-        list-style: none;
-        padding: 0;
-        margin: 0;
+    #user-button:hover {
+      color: #d72d6e;
     }
-
-    .user-menu ul li {
-        transition: color 0.3s ease;
-        padding: 15px;
-        text-align: center;
+  }
+  
+  /* Mobile Styles */
+  @media (max-width: 1004px) {
+    .cart, .traveler, .about, .inbox {
+      display: none;
     }
     
-    .user-menu ul li a {
-        transition: color 0.3s ease;
-        text-decoration: none;
-        color: black;
-        font-size: 1.2rem;
-    }
-    
-    .user-menu ul li a:hover{
-        color: white;
-    }
-
-    .user-menu ul li:hover {
-        background-color: #d72d6e;
-    }
-    #user-close-btn {
-        height: 3vh;  
-        width: 3vw;   
-        font-size: 2rem; 
-        color: black;
-        background: none;
-        border: none;
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    #user-close-btn:hover {
-        color: #d72d6e; 
-    }
-    .help {
-        z-index: 100;
-        position: fixed;
-        right: 5%;
-        bottom: 7%;
-    }
-    .help a{
-        color: black; 
-        text-decoration:none;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
-    .help a:hover{
-        color: #d72d6e;
-    }
-    
-}
-
-
-
-
-/* media -2 */
-@media (max-width: 1004px) {
-    #search-button {
-        font-size: 10px;
-    }
-
-    .cart {
-        display: none;
-    }
-
-    .traveler {
-        display: none;
-    }
-
-    .about {
-        display: none;
-    }
-    .inbox{
-        display: none;
-    }
-
-   
-
     #logo-r {
-        font-size: medium;
+      font-size: medium;
     }
+    
     #logo-s {
-        font-size: large;
+      font-size: large;
     }
-    #help-icon {
-        font-size: 2rem;
-    }
+    
     .menubar {
-        font-size: 1.5rem;
-        color: #d72d6e;
-        opacity: 0.9;
-        position: absolute; 
-        top: 50%;
-        right: 2%;
-        transform: translateY(-50%);  
+      position: absolute;
+      top: 50%;
+      right: 2%;
+      transform: translateY(-50%);
     }
     
-    #menubotton {
-        background: none;    
-        border: none;        
-        padding: 0;          
-        cursor: pointer;   
-        outline: none;     
+    #menubutton i {
+      font-size: 2rem;
+      color: #d72d6e;
     }
-    
-    #menubotton i {
-        font-size: 2rem;   
-        color: #d72d6e;   
-    }
-    .menu {
-        display: none;
-        position: fixed;
-        right: 0;
-        top: 8vh;
-        background-color: rgba(230, 230, 230, 0.8);
-        width: 200px;
-        height: 100%;
-        box-shadow: -2px 0 5px rgba(0, 0, 0, 0.5);
-    }
-    
-    .menu ul {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
-
-    .menu ul li {
-        padding: 15px;
-        text-align: center;
-    }
-    
-    .menu ul li a {
-        text-decoration: none;
-        color: black;
-        font-size: 1.2rem;
-    }
-    .menu ul li a :hover{
-        color: white;
-    }
-    .menu ul:hover{
-        color: white;
-    }
-    .menu ul li:hover {
-        background-color: #d72d6e;
-    }
-    #close-btn {
-        height: 3vh;  
-        width: 3vw;   
-        font-size: 2rem; 
-        color: black;
-        background: none;
-        border: none;
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    #close-btn:hover {
-        color: #d72d6e; 
-    }
-    .user-menu{
-        display: none;
-    }
-    #user-menu{
-    display: none;
-    }
-    .user-menu ul{
-        display: none;
-    }
-    .user-menu button{
-        display: none;
-    }
-    .help {
-        z-index: 100;
-        position: fixed;
-        right: 7%;
-        bottom: 7%;
-    }
-    .help a{
-        color: black; 
-        text-decoration:none;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
-    .help a:hover{
-        color: #d72d6e;
-    }
-}
-
+  }
