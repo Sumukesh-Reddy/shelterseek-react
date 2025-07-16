@@ -1,6 +1,6 @@
 .filter-menu {
-    position: absolute;
-    top: 35%;
+    position: fixed;
+    top: 5%;
     left: 50%;
     transform: translateX(-50%);
     display: flex;

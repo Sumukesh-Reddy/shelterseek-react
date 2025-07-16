@@ -87,6 +87,45 @@ app.get('/api/rooms', async (req, res) => {
   }
 });
 
+
+app.get('/api/rooms/:id', async (req, res) => {
+  try {
+    const roomId = req.params.id;
+    console.log('Requested room ID:', roomId); // Debug logging
+
+    if (!ObjectId.isValid(roomId)) {
+      console.log('Invalid ID format:', roomId);
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid room ID format'
+      });
+    }
+
+    const room = await RoomData.findOne({ 
+      _id: new mongoose.Types.ObjectId(roomId),
+      status: { $regex: /^approved$/i }
+    }).lean();
+
+    if (!room) {
+      console.log('Room not found:', roomId);
+      return res.status(404).json({
+        status: 'error',
+        message: 'Room not found or not approved'
+      });
+    }
+
+    console.log('Found room:', room._id); // Debug logging
+    const processedRoom = await processRoomData(room);
+    res.json({ status: 'success', data: processedRoom });
+  } catch (error) {
+    console.error('Error in /api/rooms/:id:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch room',
+      error: error.message
+    });
+  }
+});
 // Image serving endpoint
 app.get('/api/images/:id', async (req, res) => {
   try {

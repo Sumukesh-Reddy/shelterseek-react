@@ -90,7 +90,7 @@ body {
     transition: color 0.3s ease;
     list-style: none;
     padding: 0;
-    margin: 0;
+    margin-top: 20%;
 }
 
 .user-menu ul li {
@@ -103,7 +103,7 @@ body {
     transition: color 0.3s ease;
     text-decoration: none;
     color: black;
-    font-size: 1.2rem;
+    font-size: 1rem;
 }
 
 .user-menu ul li a:hover{
@@ -136,41 +136,63 @@ body {
   
   /* Mobile Menu Styles */
   .mobile-menu {
+    transition: color 0.3s ease;
+    border-radius: 20px;
     position: fixed;
-    top: 0;
-    right: 0;
-    width: 250px;
-    height: 100vh;
-    background-color: white;
-    box-shadow: -2px 0 5px rgba(0,0,0,0.1);
-    z-index: 1001;
-    padding: 20px;
+    right: 2vw;
+    top: 8vh;
+    background-color: rgba(230, 230, 230, 0.8);
+    width: 200px;
+    height: 40%;
+    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.5);
+   
   }
   
   .mobile-menu ul {
+    transition: color 0.3s ease;
     list-style: none;
     padding: 0;
-    margin-top: 40px;
-  }
-  
-  .mobile-menu li {
-    padding: 12px 0;
-  }
-  
-  .mobile-menu a {
+    margin-top: 20%;
+}
+
+.mobile-menu ul li {
+    transition: color 0.3s ease;
+    padding: 15px;
+    text-align: center;
+}
+
+.mobile-menu ul li a {
+    transition: color 0.3s ease;
     text-decoration: none;
-    color: #333;
-    font-size: 1.1rem;
-  }
+    color: black;
+    font-size: 1rem;
+}
+
+.mobile-menu ul li a:hover{
+    color: white;
+}
+
+.mobile-menu ul li:hover {
+    background-color: #d72d6e;
+}
   
   .close-btn {
-    position: absolute;
-    right: 20px;
-    top: 20px;
+    height: 3vh;  
+    width: 3vw;   
+    font-size: 2rem; 
+    color: black;
     background: none;
     border: none;
-    font-size: 1.5rem;
+    position: absolute;
+    top: 10px;
+    right: 10px;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .close-btn:hover{
+    color: #d72d6e;
   }
   
   /* Desktop Styles */

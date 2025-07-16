@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import './Navbar.css';
 
 const Navbar = ({ searchKeywords, onSearchChange }) => {
@@ -49,7 +50,7 @@ const Navbar = ({ searchKeywords, onSearchChange }) => {
       </div>
 
       <div className="about">
-        <a href="/about">About</a>
+        <Link to="/about">About</Link>
       </div>
 
       <div className="inbox">
@@ -64,7 +65,7 @@ const Navbar = ({ searchKeywords, onSearchChange }) => {
           onClick={toggleUserMenu}
           style={{ background: 'none', border: 'none', cursor: 'pointer' }}
         >
-          <i className="fa fa-user" aria-hidden="true"></i>
+          <i className="fa fa-user" aria-hidden="true" style={{fontSize:'1.7rem'}}></i>
         </button>
 
         {isUserMenuOpen && (
@@ -111,8 +112,8 @@ const Navbar = ({ searchKeywords, onSearchChange }) => {
             <li><a href="/profile">Profile</a></li>
             <li><a href="/messages">Inbox</a></li>
             <li><a href="/history">History</a></li>
-            <li><a href="/wishlist">Wish List</a></li>
-            <li><a href="/about">About</a></li>
+            <li> <Link to="/Wishlist">Wishlist</Link></li>
+            <li> <Link to="/about">About</Link></li>
             <li><a href="/loginweb">Login</a></li>
           </ul>
         </div>

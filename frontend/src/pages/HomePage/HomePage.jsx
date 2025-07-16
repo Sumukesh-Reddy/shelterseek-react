@@ -50,6 +50,8 @@ const HomePage = () => {
     <div className="home-page">
       <Navbar searchKeywords={filters.searchKeywords} onSearchChange={handleSearchChange} />
       <Slider />
+      <br/>
+      <hr/>
       <button
         id="filter-button"
         className="filter-button"

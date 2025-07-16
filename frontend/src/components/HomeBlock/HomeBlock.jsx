@@ -20,7 +20,7 @@ const HomeBlock = ({ room }) => {
   };
 
   const handleClick = () => {
-    navigate(`/room_layout?id=${room._id}`);
+    navigate(`/room/${room._id}`); 
   };
 
   return (
@@ -73,7 +73,7 @@ const HomeBlock = ({ room }) => {
                 ₹{room.price}
               </span>
               <br />
-              <span className="discount" style={{backgroundColor:'green', fontSize:'13px'}}>
+              <span className="discount" >
                 Discount: {room.discount}% off
               </span>
             </>

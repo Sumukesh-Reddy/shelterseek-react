@@ -1,201 +1,345 @@
-.room-layout {
-    display: flex;
-    padding: 2rem;
-    gap: 2rem;
-    max-width: 1200px;
-    margin: 0 auto;
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
 }
-
-.room-images {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.main-image {
-    width: 100%;
-    height: 400px;
-    background-size: cover;
-    background-position: center;
-    border-radius: 10px;
-}
-
-.thumbnail-container {
-    display: flex;
-    gap: 1rem;
-    overflow-x: auto;
-    padding-bottom: 10px;
-}
-
-.thumbnail {
-    width: 100px;
-    height: 75px;
-    background-size: cover;
-    background-position: center;
-    border-radius: 5px;
-    cursor: pointer;
-    opacity: 0.7;
-    transition: all 0.3s ease;
-}
-
-.thumbnail:hover, .thumbnail.active {
-    opacity: 1;
-    transform: scale(1.05);
-}
-
-.room-details {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
-
-.room-details h1 {
-    font-size: 2rem;
-    color: #333;
-}
-
-.location {
-    font-size: 1.1rem;
-    color: #666;
-}
-
-.price-section {
+.room-home-name {
+    width: 90vw;
+    margin-left: 5vw;
+    margin-bottom: 1vh;
     display: flex;
     align-items: center;
-    gap: 1rem;
-    flex-wrap: wrap;
 }
 
-.price {
-    font-size: 1.5rem;
-    font-weight: bold;
+.room-share-button-div button {
+    font-size: larger;
+    background-color: #f4f4f4;
+    border: none;
+    cursor: pointer;
+    transition: color 0.3s ease-in;
+}
+
+.room-share-button-div button:hover {
     color: #d72d6e;
 }
 
-.old-price {
-    text-decoration: line-through;
-    color: #999;
-    font-size: 1.2rem;
+.room-main-image {
+    margin-left: 5vw;
+    width: 90vw;
+    height: 60vh;
+    background-color: #ccc;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;    
+    border-radius: 2vw;
 }
 
-.discount {
-    background-color: #d72d6e;
-    color: white;
-    padding: 0.2rem 0.5rem;
-    border-radius: 5px;
-    font-size: 0.9rem;
-}
-
-.per-night {
-    color: #666;
-    font-size: 0.9rem;
-}
-
-.room-info {
-    display: flex;
-    gap: 2rem;
-    padding: 1rem 0;
-    border-top: 1px solid #eee;
-    border-bottom: 1px solid #eee;
-}
-
-.info-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: #555;
-}
-
-.description {
-    padding: 1rem 0;
-    border-bottom: 1px solid #eee;
-}
-
-.description h2 {
-    font-size: 1.3rem;
-    margin-bottom: 1rem;
-    color: #333;
-}
-
-.amenities {
-    padding: 1rem 0;
-    border-bottom: 1px solid #eee;
-}
-
-.amenities h2 {
-    font-size: 1.3rem;
-    margin-bottom: 1rem;
-    color: #333;
-}
-
-.amenities-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
-}
-
-.amenity-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: #555;
-}
-
-.booking-form {
-    background: #f9f9f9;
-    padding: 1.5rem;
-    border-radius: 10px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
-
-.booking-form h2 {
-    font-size: 1.3rem;
-    margin-bottom: 1rem;
-    color: #333;
-}
-
-.form-group {
-    margin-bottom: 1rem;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    color: #555;
-}
-
-.form-group input {
-    width: 100%;
-    padding: 0.5rem;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-}
-
-.book-button {
-    width: 100%;
-    padding: 0.8rem;
-    background-color: #d72d6e;
-    color: white;
+.room-main-image button {
+    position: absolute;
+    top: 48.4%;
+    height: 50vh;
+    transform: translateY(-50%);
+    background: rgba(0,0,0,0);
     border: none;
-    border-radius: 5px;
-    font-size: 1rem;
+    padding: 2vh 2vw;
     cursor: pointer;
-    transition: background-color 0.3s ease;
+    border-radius: 2vw;
+    font-size: x-large;
 }
 
-.book-button:hover {
-    background-color: #ec055d;
+#room-prev-image {
+    color: #d72d6e;
+    left: 7vw;
+}
+#room-next-image {
+    color: #d72d6e;
+    right: 7vw;
+}
+.room-container {
+    display: flex;
+    justify-content: space-between;
+    margin: 3vh 5vw;
+    gap: 2vw;
+}
+
+.room-left-side, .room-right-side {
+    width: 48%;
+    display: flex;
+    flex-direction: column;
+    gap: 2vh;
+}
+
+.room-layout-description, .room-verification, .room-room-information {
+    background: #fff;
+    padding: 3vh;
+    border-radius: 2vw;
+}
+
+.room-amenities-grid {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1vh;
+}
+
+.room-amenities-grid li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.room-amenity-name {
+    flex: 1;
+    text-align: left;
+    font-weight: bold;
+}
+
+.room-separator {
+    flex: 0.1;
+    text-align: center;
+}
+
+.room-amenities-grid span[id$="-verify"] {
+    flex: 1;
+    text-align: left;
+}
+
+.room-rent {
+    background: #fff;
+    padding: 3vh;
+    border-radius: 2vw;
+}
+
+.room-rent label {
+    display: block;
+    margin-top: 2vh;
+    font-weight: bold;
+}
+
+.room-rent input {
+    width: 100%;
+    font-size: large;
+    padding: 1.3vh;
+    margin-top: 1vh;
+    border: 1px solid #ccc;
+    border-radius: 1vw;
+    outline: none;
+}
+
+.room-rent p {
+    font-size: 2vh;
+    margin: 1vh 0;
+    font-weight: bold;
+}
+
+.room-rent .fa-star {
+    font-size: 2vh;
+}
+
+.room-rent input:hover {
+    box-shadow: 1px 0px 5px rgba(0, 0, 0, 0.5);
+}
+
+.room-rent button {
+    width: 48%;
+    padding: 2vh;
+    margin-top: 2vh;
+    border: none;
+    border-radius: 1vw;
+    cursor: pointer;
+}
+
+#room-rent-button {
+    font-size: large;
+    background-color: #d72d6e;
+    color: white;
+    transition: all 0.3s ease;
+}
+#room-save-button {
+    font-size: large;
+    background-color: #333;
+    color: white;
+}
+
+.room-host-info {
+    width: 40vw;
+    display: flex;
+    align-items: center;
+    background: #fff;
+    padding: 3vh;
+    border-radius: 2vw;
+}
+
+.room-host-image {
+    width: 8vw;
+    height: 8vw;
+    border-radius: 50%;
+    margin-right: 2vw;
+}
+
+#room-message {
+    padding: 2vh;
+    margin-top: 2vh;
+    border: none;
+    border-radius: 1vw;
+    cursor: pointer;
+    background-color: #d72d6e;
+    color: white;
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+}
+
+@media (min-width: 768px) {
+    .room-share-button-div {
+        margin-left: 65vw;
+    }
+
+    #room-message {
+        width: 50%;
+        font-size: large;
+    }
 }
 
 @media (max-width: 768px) {
-    .room-layout {
-        flex-direction: column;
-        padding: 1rem;
+    .room-share-button-div {
+        margin-left: 45vw;
     }
 
-    .amenities-grid {
-        grid-template-columns: 1fr;
+    .room-container {
+        flex-direction: column;
     }
+    .room-left-side, .room-right-side {
+        width: 100%;
+    }
+    #room-message {
+        width: 90%;
+        font-size: small;
+    }
+}
+
+#room-map {
+    width: 90vw;
+    height: 50vh;
+    margin-left: 5vw;
+    border-radius: 2vw;
+    margin-bottom: 4vh;
+}
+
+.room-review-main {
+    margin-left: 5vw;
+}
+
+.room-review-item {
+    display: grid;
+    align-items: center;
+    gap: 2vw;
+    background: #fff;
+    padding: 2vh;
+    border-radius: 1vw;
+    width: 90%;
+    margin-bottom: 2vh;
+}
+
+@media (max-width: 700px) {
+    .room-review-item {
+        grid-template-columns: 60%;
+    }
+}
+
+@media (min-width: 700px) {
+    .room-review-item {
+        grid-template-columns: 40% 40%;
+    }
+}
+
+.room-review-content {
+    display: flex;
+    align-items: center;
+    gap: 2vw;
+}
+
+.room-review-image {
+    width: 6vh;
+    height: 6vh;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.room-review-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.room-review-name {
+    color: #d72d6e;
+    margin: 0;
+}
+
+.room-review-rating {
+    margin: 5px 0;
+    font-size: 16px;
+}
+
+.room-review-description {
+    font-size: 14px;
+    color: #333;
+}
+
+.room-stars {
+    font-size: 10px;
+    color: gold;
+}
+
+#room-avg-stars {
+    font-size: 15px;
+    color: gold;
+}
+
+.room-thumbnails {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.room-thumbnail {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.room-thumbnail.room-active {
+    border: 2px solid #d72d6e;
+}
+
+#room-rent-button, #room-save-button, #room-message {
+    transition: all 0.3s ease;
+}
+
+#room-rent-button:hover:not(:disabled) {
+    background-color: #b71c5a;
+}
+
+#room-save-button:hover {
+    background-color: #555;
+}
+
+#room-message:hover {
+    background-color: #b71c5a;
+}
+
+.room-share-button-div button:hover {
+    color: #d72d6e;
+}
+#room-map {
+    width: 90vw;
+    height: 50vh;
+    margin-left: 5vw;
+    border-radius: 2vw;
+    margin-bottom: 4vh;
 }

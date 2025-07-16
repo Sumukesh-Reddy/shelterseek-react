@@ -6,7 +6,7 @@ const Testimonials = () => {
     {
       id: 1,
       quote: "ShelterSeek helped me find the perfect place for my vacation. Highly recommended!",
-      author: "ACK Levi"
+      author: "Zoro"
     },
     {
       id: 2,
