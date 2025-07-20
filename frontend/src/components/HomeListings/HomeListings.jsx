@@ -65,19 +65,28 @@ const HomeListings = ({ filters }) => {
     const matchesAdults = filters.adults <= (room.capacity || 0);
     const matchesChildren = filters.children <= (room.capacity || 0);
     const matchesPropertyType = filters.selectedTypes.length === 0 || 
-      filters.selectedTypes.some(type => room.title.toLowerCase().includes(type.toLowerCase()));
-    const matchesLocation = filters.selectedLocations.length === 0 || 
-      filters.selectedLocations.includes(room.roomLocation);
-    const matchesAmenities = filters.selectedAmenities.length === 0 || 
-      filters.selectedAmenities.every(amenity => room.amenities?.includes(amenity));
+    (room.propertyType && filters.selectedTypes.some(type => 
+      room.propertyType.toLowerCase() === type.toLowerCase().replace(/\s+/g, '-')
+    ));
+      const matchesLocation = filters.selectedLocations.length === 0 || 
+      (room.roomLocation && filters.selectedLocations.some(location => 
+        room.roomLocation.toLowerCase() === location.toLowerCase().replace(/\s+/g, '-')
+      ));
+      const matchesAmenities = filters.selectedAmenities.length === 0 || 
+      filters.selectedAmenities.every(amenity => {
+        const amenityKey = amenity.toLowerCase().replace(/\s+/g, '-');
+        return Array.isArray(room.amenities) && room.amenities.includes(amenityKey);
+      });
     const matchesHostGender = filters.hostGender === 'any' || 
       room.hostGender?.toLowerCase() === filters.hostGender;
     const matchesRoomSize = filters.roomSize === 'any' || 
       room.size.toLowerCase() === filters.roomSize;
     const matchesTransport = filters.transport === 'Any' || 
       room.transportDistance === filters.transport;
-    const matchesFoodPreferences = filters.foodPreferences.length === 0 || 
-      filters.foodPreferences.includes(room.foodFacility);
+      const matchesFoodPreferences = filters.foodPreferences.length === 0 || 
+      (room.foodFacility && filters.foodPreferences.some(food => 
+        room.foodFacility.toLowerCase() === food.toLowerCase()
+      ));
     const matchesDays = !room.maxdays || room.maxdays >= filters.days;
 
     return (

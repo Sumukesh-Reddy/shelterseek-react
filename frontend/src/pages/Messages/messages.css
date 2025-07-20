@@ -1,0 +1,31 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+}
+.message-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+}
+.message {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+.timestamp {
+    color: #666;
+    font-size: 0.9em;
+}
+#homeBtn {
+    padding: 10px 20px;
+    background-color: #d72d6e;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-bottom: 20px;
+}
+#homeBtn:hover {
+    background-color: #b3245a;
+}

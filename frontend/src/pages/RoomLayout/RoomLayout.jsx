@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import Navbar from '../../components/Navbar/Navbar';
 import 'leaflet/dist/leaflet.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -19,6 +19,7 @@ import RoomMap from '../../components/RoomMap/RoomMap';
 
 const RoomLayout = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [room, setRoom] = useState(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [likedHomes, setLikedHomes] = useState([]);
@@ -46,7 +47,7 @@ const RoomLayout = () => {
       }
       return "medium";
     };
-
+    
     return {
       id: roomData._id,
       title: roomData.title || "Untitled Property",
@@ -228,6 +229,25 @@ const RoomLayout = () => {
   const showErrorMessage = (message) => {
     setError(message);
     setTimeout(() => setError(null), 5000);
+  };
+
+  const handleMessage = () => {
+    try {
+      if (!room) {
+        showErrorMessage("Room data not loaded yet");
+        return;
+      }
+      navigate('/message', { 
+        state: { 
+          hostId: room.id,
+          hostName: room.host.name,
+          hostEmail: room.host.email
+        }
+      });
+    } catch (error) {
+      console.error('Navigation error:', error);
+      setError('Failed to open messages. Please try again.');
+    }
   };
 
   const getRentButtonText = () => {
@@ -460,16 +480,35 @@ const RoomLayout = () => {
             
             <div className="room-host-info">
               <img 
-                src={room.host.image || '/images/default-user.jpg'} 
-                alt="Host"
+                src={
+                  room.host?.image 
+                    ? `http://localhost:3001/api/images//${room.host.image}`
+                    : '.../public/images/logo.png'
+                }
+                alt={`${room.host?.name || 'Host'} profile`}
                 className="room-host-image"
                 onError={(e) => {
-                  e.target.src = '/images/default-user.jpg';
+                  e.target.onerror = null;
+                  e.target.src = '.../public/images/logo.png';
                 }}
+                loading="lazy"
+                decoding="async"
               />
               <div className="room-host-details">
                 <h3>Hosted by {room.host.name || 'Unknown'}</h3>
-                <button id="room-message">
+                <button 
+                  id="room-message" 
+                  onClick={handleMessage}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#d72d6e',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    marginTop: '10px'
+                  }}
+                >
                   Message
                 </button>
               </div>

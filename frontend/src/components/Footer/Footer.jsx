@@ -12,6 +12,7 @@ import {
   faInstagram,
   faLinkedin
 } from '@fortawesome/free-brands-svg-icons';
+import { Link } from 'react-router-dom';
 
 const Footer = () => {
   return (
@@ -30,7 +31,7 @@ const Footer = () => {
             <li><a href="/">Home</a></li>
             <li><a href="/about">About</a></li>
             <li><a href="/about">Contact</a></li>
-            <li><a href="/privacypolicy">Privacy Policy</a></li>
+            <li><Link to="/privacy">Privacy Policy</Link></li>
           </ul>
         </div>
 

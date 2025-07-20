@@ -346,7 +346,7 @@ const FilterMenu = ({ onClose, onApply, currentFilters }) => {
       <div className="filter-group">
         <label><b>Food Preferences:</b></label>
         <div className="multi-select">
-          {['Vegetarian', 'Non-Vegetarian'].map(food => (
+          {['Vegetarian', 'Non-Vegetarian', 'both'].map(food => (
             <div
               key={food}
               className={`select-box ${filters.foodPreferences.includes(food) ? 'active' : ''}`}
