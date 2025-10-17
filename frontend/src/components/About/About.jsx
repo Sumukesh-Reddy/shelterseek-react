@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   FaBullseye, 
   FaEye, 
@@ -7,9 +7,51 @@ import {
   FaEnvelope,
 } from 'react-icons/fa';
 import './About.css';
-import Footer from '../Footer/Footer';
 
 const About = () => {
+  const [travelerCount, setTravelerCount] = useState(0);
+  const [hostCount, setHostCount] = useState(0);
+
+  useEffect(() => {
+    const fetchUserCounts = async () => {
+      try {
+        const response = await fetch('http:localhost:3001/api/user-counts');
+        const data = await response.json();
+        if (data.success) {
+          animateCount(data.travelerCount, setTravelerCount);
+          animateCount(data.hostCount, setHostCount);
+        } else {
+          setTravelerCount(10000);
+          setHostCount(5000);
+        }
+      } catch (error) {
+        console.error('Error fetching user counts:', error);
+        setTravelerCount(10000);
+        setHostCount(5000);
+      }
+    };
+
+    const animateCount = (targetNumber, setter) => {
+      const duration = 2000;
+      const frameRate = 30;
+      const totalFrames = duration / (1000 / frameRate);
+      const increment = targetNumber / totalFrames;
+      let currentNumber = 0;
+      
+      const timer = setInterval(() => {
+        currentNumber += increment;
+        if (currentNumber >= targetNumber) {
+          clearInterval(timer);
+          currentNumber = targetNumber;
+        }
+        setter(Math.round(currentNumber));
+      }, 1000 / frameRate);
+    };
+
+    fetchUserCounts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="about-page">
       <header className="about-header">
@@ -56,11 +98,11 @@ const About = () => {
         <section className="stats-section">
           <div className="stats-container">
             <div className="stat-item">
-              <div className="stat-number">10,000+</div>
+              <div className="stat-number">{travelerCount.toLocaleString()}+</div>
               <div className="stat-label">Happy Travelers</div>
             </div>
             <div className="stat-item">
-              <div className="stat-number">5,000+</div>
+              <div className="stat-number">{hostCount.toLocaleString()}+</div>
               <div className="stat-label">Verified Hosts</div>
             </div>
             <div className="stat-item">
@@ -104,7 +146,6 @@ const About = () => {
               <div className="social-links">
                 <a href="https://www.linkedin.com/in/jhansi-gudelli-094543315/" target="_blank" rel="noopener noreferrer"><FaLinkedin /></a>
                 <a href="https://github.com/jhansi-19" target="_blank" rel="noopener noreferrer"><FaGithub /></a>
-                {/* <a href=""><FaEnvelope /></a> */}
               </div>
             </div>
 
@@ -119,7 +160,6 @@ const About = () => {
               <div className="social-links">
                 <a href="https://www.linkedin.com/in/prudhvi-natha-reddy-67222a29b/" target="_blank" rel="noopener noreferrer"><FaLinkedin /></a>
                 <a href="https://github.com/prudhvi-natha-reddy" target="_blank" rel="noopener noreferrer"><FaGithub /></a>
-                {/* <a href="#"><FaEnvelope /></a> */}
               </div>
             </div>
 
@@ -134,7 +174,6 @@ const About = () => {
               <div className="social-links">
                 <a href="https://www.linkedin.com/in/jaswanth-medisetti-830478318/" target="_blank" rel="noopener noreferrer"><FaLinkedin /></a>
                 <a href="https://github.com/Jaswanth-m25" target="_blank" rel="noopener noreferrer"><FaGithub /></a>
-                {/* <a href="#"><FaEnvelope /></a> */}
               </div>
             </div>
             
@@ -149,7 +188,6 @@ const About = () => {
               <div className="social-links">
                 <a href="https://www.linkedin.com/in/venkata-sai-reddy-anipireddy-a73b742a3/" target="_blank" rel="noopener noreferrer"><FaLinkedin /></a>
                 <a href="https://github.com/venkatasai0604" target="_blank" rel="noopener noreferrer"><FaGithub /></a>
-                {/* <a href="#"><FaEnvelope /></a> */}
               </div>
             </div>
           </div>
@@ -161,8 +199,6 @@ const About = () => {
           <a href="/" className="cta-button">Explore Listings</a>
         </section>
       </div>
-
-      <Footer />
     </div>
   );
 };

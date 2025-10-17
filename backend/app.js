@@ -20,11 +20,11 @@ const hostAdminConnection = mongoose.createConnection(process.env.HOST_ADMIN_URI
   w: 'majority'
 });
 
-// Initialize GridFS
+
 let gfsBucket;
 hostAdminConnection.once('open', () => {
   gfsBucket = new mongoose.mongo.GridFSBucket(hostAdminConnection.db, {
-    bucketName: 'images' // Make sure this matches your GridFS bucket name
+    bucketName: 'images' 
   });
   console.log('GridFS Bucket initialized');
 });
@@ -34,7 +34,7 @@ const RoomData = hostAdminConnection.model('RoomData', new mongoose.Schema({
   
 }), 'RoomData');
 
-// Enhanced /api/rooms endpoint with image processing
+
 app.get('/api/rooms', async (req, res) => {
   try {
     const rooms = await RoomData.find({ status: { $regex: /^approved$/i } }).lean();
@@ -149,7 +149,27 @@ app.get('/api/images/:id', async (req, res) => {
   }
 });
 
-// Start server
+app.get('/api/user-counts', async (req, res) => {
+  try {
+    // Count travelers and hosts separately by filtering by accountType
+    const travelerCount = await Traveler.countDocuments({ accountType: 'traveller' });
+    const hostCount = await Host.countDocuments({ accountType: 'host' });
+    
+    res.json({
+      success: true,
+      travelerCount,
+      hostCount
+    });
+  } catch (error) {
+    console.error('Error fetching user counts:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching user counts'
+    });
+  }
+});
+
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

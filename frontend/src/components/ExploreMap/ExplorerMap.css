@@ -1,0 +1,205 @@
+/* ExplorerMap.css */
+.explorer-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  
+  .explorer-modal-content {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 1200px;
+    height: 85%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+  
+  .explorer-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #ddd;
+    background-color: #f8f9fa;
+  }
+  
+  .explorer-modal-header h2 {
+    color: #d72d6e;
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: bold;
+  }
+  
+  .explorer-modal-body {
+    flex: 1;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .explorer-close-button {
+    background: none;
+    border: none;
+    font-size: 28px;
+    cursor: pointer;
+    color: #555;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+  }
+  
+  .explorer-close-button:hover {
+    color: #d72d6e;
+    background-color: #e9ecef;
+  }
+  
+  .explorer-map-container {
+    height: 400px;
+    width: 100%;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 2px solid #e9ecef;
+    flex: 1;
+  }
+  
+  .explorer-map-controls {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  
+  .explorer-control-btn {
+    padding: 12px 24px;
+    background-color: #d72d6e;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 160px;
+    justify-content: center;
+  }
+  
+  .explorer-control-btn:hover:not(:disabled) {
+    background-color: #ec055d;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(215, 45, 110, 0.3);
+  }
+  
+  .explorer-control-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+  
+  .explorer-control-btn:active:not(:disabled) {
+    transform: translateY(0);
+  }
+  
+  .hotel-popup {
+    text-align: center;
+    min-width: 200px;
+  }
+  
+  .view-details-btn {
+    margin-top: 8px;
+    padding: 8px 16px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.3s ease;
+  }
+  
+  .view-details-btn:hover {
+    background: #0056b3;
+  }
+  
+  .loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+  }
+  
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  
+  /* Custom marker styles */
+  .custom-user-marker {
+    background: none !important;
+    border: none !important;
+  }
+  
+  .hotel-marker {
+    background: none !important;
+    border: none !important;
+  }
+  
+  /* Responsive design */
+  @media (max-width: 768px) {
+    .explorer-modal-content {
+      width: 95%;
+      height: 90%;
+    }
+    
+    .explorer-modal-header h2 {
+      font-size: 1.2rem;
+    }
+    
+    .explorer-map-controls {
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .explorer-control-btn {
+      width: 100%;
+      max-width: 200px;
+    }
+    
+    .explorer-map-container {
+      height: 300px;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .explorer-modal-body {
+      padding: 15px;
+    }
+    
+    .explorer-modal-header {
+      padding: 10px 15px;
+    }
+    
+    .explorer-map-container {
+      height: 250px;
+    }
+  }

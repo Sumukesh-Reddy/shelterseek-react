@@ -6,6 +6,7 @@ import FilterMenu from '../../components/FilterMenu/FilterMenu';
 import HomeListings from '../../components/HomeListings/HomeListings';
 import TravelContent from '../../components/travelerContent/travelerContent';
 import MapComponent from '../../components/Map/MapComponent';
+import ExplorerButton from '../../components/ExploreButton/ExploreButton.jsx';
 import Footer from '../../components/Footer/Footer';
 import './HomePage.css';
 
@@ -69,6 +70,7 @@ const HomePage = () => {
       )}
       <HomeListings filters={filters} />
       <TravelContent/>
+      <ExplorerButton/>
       <MapComponent/>
       <Footer/>
     </div>

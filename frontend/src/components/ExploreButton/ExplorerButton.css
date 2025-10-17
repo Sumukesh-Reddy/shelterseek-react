@@ -1,0 +1,60 @@
+/* ExplorerButton.css */
+.map-explorer-button {
+    position: fixed;
+    bottom: 2%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1004;
+    background-color: #d72d6e;
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 15px 30px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.3s ease;
+  }
+  
+  .map-explorer-button:hover {
+    background-color: #ec055d;
+    transform: translateX(-50%) scale(1.05);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  }
+  
+  .map-explorer-button:active {
+    transform: translateX(-50%) scale(0.95);
+  }
+  
+  .map-explorer-button i {
+    font-size: 20px;
+  }
+  
+  /* Responsive design for the button */
+  @media (max-width: 768px) {
+    .map-explorer-button {
+      padding: 12px 24px;
+      font-size: 16px;
+      bottom: 1%;
+    }
+    
+    .map-explorer-button i {
+      font-size: 18px;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .map-explorer-button {
+      padding: 10px 20px;
+      font-size: 14px;
+      gap: 8px;
+    }
+    
+    .map-explorer-button i {
+      font-size: 16px;
+    }
+  }
