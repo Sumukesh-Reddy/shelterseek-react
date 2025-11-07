@@ -1,0 +1,66 @@
+.privacy-policy-container {
+    background-color: #f8f9fa;
+    padding: 2rem 0;
+    min-height: 100vh;
+  }
+  
+  .privacy-policy-content {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  }
+  
+  .privacy-policy-content h1 {
+    color: #2c3e50;
+    text-align: center;
+    margin-bottom: 0.5rem;
+  }
+  
+  .last-updated {
+    text-align: center;
+    color: #7f8c8d;
+    margin-bottom: 2rem;
+  }
+  
+  .privacy-policy-content h2 {
+    color: #d72d6e;
+    margin-top: 2rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #eee;
+  }
+  
+  .privacy-policy-content ul {
+    margin: 1rem 0;
+    padding-left: 1.5rem;
+  }
+  
+  .privacy-policy-content li {
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+  }
+  
+  .contact-section {
+    background-color: #f5f5f5;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-top: 2rem;
+  }
+  
+  .contact-info {
+    margin-top: 1rem;
+  }
+  
+  .contact-info p {
+    margin: 0.5rem 0;
+  }
+  
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    .privacy-policy-content {
+      padding: 1.5rem;
+      margin: 0 1rem;
+    }
+  }

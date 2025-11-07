@@ -1,0 +1,90 @@
+.home-block {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: transform 0.2s;
+    margin-bottom: 20px;
+  }
+  
+  .home-block:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .home-photos-block {
+    position: relative;
+    height: 200px;
+    width: 100%;
+  }
+  
+  .home-image-container {
+    width: 100%;
+    height: 100%;
+  }
+  
+  .home-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+  }
+  
+  .image-nav-button {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+  }
+  
+  .image-nav-button.left {
+    left: 10px;
+  }
+  
+  .image-nav-button.right {
+    right: 10px;
+  }
+  
+  .booked-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+  }
+  
+  .home-content {
+    padding: 15px;
+  }
+  
+  .price {
+    font-weight: bold;
+    font-size: 1.2rem;
+    margin: 8px 0;
+  }
+  
+  .old-price {
+    text-decoration: line-through;
+    color: #999;
+    font-size: 0.9rem;
+  }
+  
+  .discount {
+    color: green;
+    font-size: 0.9rem;
+  }
