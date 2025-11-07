@@ -17,6 +17,9 @@ import AdminLogin from './pages/Auth/AdminLogin';
 import ForgotPassword from './pages/Auth/ForgotPassword';
 import Profile from './pages/profile/profile';
 import Payment from './pages/Payment/Payment';
+import HostIndex from './pages/Host_page/host_index';
+import HostDashboard from './pages/HostDashboard/HostDashboard';
+import HostProfile from './pages/HostProfile/HostProfile';
 
 function App() {
   return (
@@ -39,6 +42,9 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/payment" element={<Payment />} />
+        <Route path="/host_index" element={<HostIndex />} />
+        <Route path="/dashboard" element={<HostDashboard />} />
+        <Route path="/hostProfile" element={<HostProfile />} />
       </Routes>
     </Router>
   );

@@ -1,28 +1,68 @@
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
+const { GridFSBucket } = require('mongodb');
 const passport = require('passport');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const cors = require('cors');
+const nodemailer = require('nodemailer');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+// Models
 const { Traveler, Host } = require('./model/usermodel');
+const RoomData = require('./model/room');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// ✅ Connect to MongoDB FIRST
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/yourdb')
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// ==================== DATABASE CONNECTIONS ====================
 
-// Middleware
+// Main DB (Users, Sessions, Auth)
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/yourdb')
+  .then(() => console.log('Main MongoDB connected'))
+  .catch(err => console.error('Main DB connection error:', err));
+
+// Host/Admin DB (Listings, GridFS)
+const hostAdminUri = process.env.HOST_ADMIN_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/yourdb';
+global.hostAdminConnection = mongoose.createConnection(hostAdminUri, {
+  retryWrites: true,
+  w: 'majority'
+});
+
+global.hostAdminConnection.on('connected', () => {
+  console.log('Connected to Host_Admin database');
+  
+  // Initialize GridFS
+  if (!global.gfsBucket) {
+    global.gfsBucket = new GridFSBucket(global.hostAdminConnection.db, { bucketName: 'images' });
+    console.log('GridFS bucket initialized');
+  }
+
+  // Initialize host models
+  const hostController = require('./controllers/hostController');
+  try {
+    hostController.initializeHostModels();
+    console.log('Host models initialized');
+  } catch (err) {
+    console.error('Failed to initialize host models:', err);
+  }
+});
+
+global.hostAdminConnection.on('error', (err) => {
+  console.error('Host_Admin DB connection error:', err.message);
+});
+
+// ==================== MIDDLEWARE ====================
+
 app.use(cors({ 
   origin: process.env.FRONTEND_URL || 'http://localhost:3000', 
   credentials: true 
 }));
 app.use(express.json());
 
-// ✅ Improved session configuration
+// Session with MongoStore
 app.use(session({
   secret: process.env.SESSION_SECRET || 'secret123',
   resave: false,
@@ -38,909 +78,459 @@ app.use(session({
   }
 }));
 
-// ✅ Initialize passport AFTER session
+// Passport
 app.use(passport.initialize());
 app.use(passport.session());
-
-// ✅ Import and use the passport configuration
 require('./config/passport')(passport);
 
-// ✅ Import routes
+// Routes
 const authRoutes = require('./routes/authRoutes');
+const hostRoutes = require('./routes/hostRoutes');
 app.use('/auth', authRoutes);
+app.use('/api', hostRoutes);
 
-// ---------------- OTP VERIFICATION ----------------
-const nodemailer = require('nodemailer');
-const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+// ==================== OTP & EMAIL SYSTEM ====================
 
 const otpStore = {};
 const verifiedEmails = new Set();
 
-// ✅ Test Email Configuration Route
+// Email Test: Config Check
 app.get('/test-email-config', async (req, res) => {
   try {
     const emailUser = process.env.EMAIL_USER || process.env.EMAIL;
     const hasEmailCreds = Boolean(emailUser && process.env.EMAIL_PASS);
-    
-    console.log('🔧 Email Config Check:', {
-      EMAIL_USER: process.env.EMAIL_USER ? 'Set' : 'Missing',
-      EMAIL: process.env.EMAIL ? 'Set' : 'Missing',
-      EMAIL_PASS: process.env.EMAIL_PASS ? 'Set' : 'Missing',
-      usingEmail: emailUser,
-      hasEmailCreds: hasEmailCreds
-    });
 
     if (!hasEmailCreds) {
-      return res.json({ 
-        success: false, 
-        message: 'Email credentials missing',
-        details: {
-          EMAIL_USER: process.env.EMAIL_USER ? 'Set' : 'Missing',
-          EMAIL: process.env.EMAIL ? 'Set' : 'Missing',
-          EMAIL_PASS: process.env.EMAIL_PASS ? 'Set' : 'Missing'
-        }
-      });
+      return res.json({ success: false, message: 'Email credentials missing' });
     }
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',
-      auth: {
-        user: emailUser,
-        pass: process.env.EMAIL_PASS
-      }
+      auth: { user: emailUser, pass: process.env.EMAIL_PASS }
     });
 
     await transporter.verify();
-    
-    res.json({ 
-      success: true, 
-      message: 'Email configuration is correct!',
-      email: emailUser
-    });
+    res.json({ success: true, message: 'Email configuration is correct!', email: emailUser });
   } catch (error) {
-    console.error('❌ Email config test error:', error);
-    res.json({ 
-      success: false, 
-      message: 'Email configuration error',
-      error: error.message 
-    });
+    res.json({ success: false, message: 'Email config error', error: error.message });
   }
 });
 
-// ✅ Simple Email Test Route
+// Email Test: Send Test OTP
 app.post('/simple-email-test', async (req, res) => {
   try {
     const { toEmail } = req.body;
-    
-    if (!toEmail) {
-      return res.status(400).json({ success: false, message: 'Email required' });
-    }
+    if (!toEmail) return res.status(400).json({ success: false, message: 'Email required' });
 
     const emailUser = process.env.EMAIL_USER || process.env.EMAIL;
     const hasEmailCreds = Boolean(emailUser && process.env.EMAIL_PASS);
-    
-    console.log('🔧 Test Email Debug:', {
-      emailUser: emailUser,
-      emailPassLength: process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 'Missing',
-      toEmail: toEmail
-    });
 
     if (!hasEmailCreds) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email credentials not configured',
-        details: {
-          emailUser: emailUser ? 'Set' : 'Missing',
-          EMAIL_PASS: process.env.EMAIL_PASS ? 'Set' : 'Missing'
-        }
-      });
+      return res.status(400).json({ success: false, message: 'Email not configured' });
     }
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',
-      auth: {
-        user: emailUser,
-        pass: process.env.EMAIL_PASS
-      }
+      auth: { user: emailUser, pass: process.env.EMAIL_PASS }
     });
 
     const testOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    const mailOptions = {
+    await transporter.sendMail({
       from: emailUser,
       to: toEmail,
       subject: 'Test OTP Email - Working!',
-      text: `This is a test email from your app. Your test OTP is: ${testOtp}`,
-      html: `<p>This is a test email from your app. Your test OTP is: <strong>${testOtp}</strong></p>`
-    };
+      html: `<p>Your test OTP is: <strong>${testOtp}</strong></p>`
+    });
 
-    await transporter.sendMail(mailOptions);
-    
-    res.json({ 
-      success: true, 
-      message: 'Test email sent successfully! Check your inbox.',
-      testOtp: testOtp
-    });
+    res.json({ success: true, message: 'Test email sent!', testOtp });
   } catch (error) {
-    console.error('❌ Test email error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to send test email',
-      error: error.message 
-    });
+    res.status(500).json({ success: false, message: 'Failed to send test email', error: error.message });
   }
 });
 
-// ✅ Debug Environment Route
-app.get('/debug-env', (req, res) => {
-  res.json({
-    EMAIL_USER: process.env.EMAIL_USER || 'Not set',
-    EMAIL: process.env.EMAIL || 'Not set', 
-    EMAIL_PASS: process.env.EMAIL_PASS ? 
-      `Set (length: ${process.env.EMAIL_PASS.length})` : 
-      'Not set',
-    NODE_ENV: process.env.NODE_ENV,
-    MONGODB_URI: process.env.MONGODB_URI ? 'Set' : 'Not set'
-  });
-});
-
-// send OTP
+// Send OTP
 app.post('/send-otp', async (req, res) => {
   const { email } = req.body;
-  
-  // ✅ Debug logging
-  const emailUser = process.env.EMAIL_USER || process.env.EMAIL;
-  console.log('🔧 OTP Request Debug:', {
-    email: email,
-    EMAIL_USER: process.env.EMAIL_USER ? 'Set' : 'Missing',
-    EMAIL: process.env.EMAIL ? 'Set' : 'Missing',
-    EMAIL_PASS: process.env.EMAIL_PASS ? 'Set' : 'Missing',
-    usingEmail: emailUser,
-    NODE_ENV: process.env.NODE_ENV
-  });
-
   if (!email) return res.status(400).json({ message: 'Email required' });
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore[email] = { otp, expires: Date.now() + 10 * 60 * 1000 }; // 10 minutes
+  otpStore[email] = { otp, expires: Date.now() + 10 * 60 * 1000 }; // 10 min
 
+  const emailUser = process.env.EMAIL_USER || process.env.EMAIL;
   const hasEmailCreds = Boolean(emailUser && process.env.EMAIL_PASS);
   const isProd = process.env.NODE_ENV === 'production';
 
   if (!hasEmailCreds && !isProd) {
-    // Dev fallback: no email creds; return OTP to help local testing
-    console.warn('⚠️ Email credentials not set. Returning OTP in dev mode.');
-    return res.json({ success: true, message: 'OTP generated (dev mode)', otp });
+    return res.json({ success: true, message: 'OTP generated (dev)', otp });
   }
 
   const transporter = nodemailer.createTransport({
     service: 'gmail',
-    auth: {
-      user: emailUser,
-      pass: process.env.EMAIL_PASS
-    }
+    auth: { user: emailUser, pass: process.env.EMAIL_PASS }
   });
 
-  const mailOptions = {
-    from: emailUser,
-    to: email,
-    subject: 'Your OTP Code',
-    text: `Your verification code is ${otp}. It expires in 10 minutes.`
-  };
-
   try {
-    await transporter.sendMail(mailOptions);
+    await transporter.sendMail({
+      from: emailUser,
+      to: email,
+      subject: 'Your OTP Code',
+      text: `Your verification code is ${otp}. Expires in 10 minutes.`
+    });
     res.json({ success: true, message: 'OTP sent successfully!' });
   } catch (error) {
-    console.error('Email error:', error);
     if (!isProd) {
-      // Dev fallback on error: still return OTP to unblock
-      return res.json({ success: true, message: 'OTP generated (dev fallback)', otp });
+      return res.json({ success: true, message: 'OTP generated (fallback)', otp });
     }
     res.status(500).json({ success: false, error: 'Failed to send OTP' });
   }
 });
 
-// verify OTP
+// Verify OTP
 app.post('/verify-otp', (req, res) => {
   const { email, otp } = req.body;
+  const data = otpStore[email];
 
-  if (!otpStore[email]) {
-    return res.status(400).json({ success: false, message: 'OTP not found or expired' });
-  }
-
-  const otpData = otpStore[email];
-  if (Date.now() > otpData.expires) {
+  if (!data || Date.now() > data.expires) {
     delete otpStore[email];
-    return res.status(400).json({ success: false, message: 'OTP expired' });
+    return res.status(400).json({ success: false, message: 'OTP expired or invalid' });
   }
 
-  if (otpData.otp === otp) {
+  if (data.otp === otp) {
     delete otpStore[email];
     verifiedEmails.add(email);
     return res.json({ success: true, message: 'OTP verified!' });
   }
-  
+
   res.status(400).json({ success: false, message: 'Invalid OTP' });
 });
 
-// ------------------- USER SIGNUP -------------------
+// ==================== AUTH ENDPOINTS ====================
+
+// Signup
 app.post('/signup', async (req, res) => {
   try {
     const { name, email, password, accountType } = req.body;
-
     if (!name || !email || !password || !accountType) {
       return res.status(400).json({ success: false, message: 'All fields required' });
     }
 
-    // Require OTP verification before allowing signup
     if (!verifiedEmails.has(email)) {
-      return res.status(400).json({ success: false, message: 'Please verify OTP before signup' });
+      return res.status(400).json({ success: false, message: 'Please verify OTP first' });
     }
 
-    // Check both collections
-    const existingTraveler = await Traveler.findOne({ email });
-    const existingHost = await Host.findOne({ email });
-    
-    if (existingTraveler || existingHost) {
-      return res.status(400).json({ success: false, message: 'User already exists' });
-    }
+    const exists = await Traveler.findOne({ email }) || await Host.findOne({ email });
+    if (exists) return res.status(400).json({ success: false, message: 'User already exists' });
 
-    let user;
-
-    // Create user data without googleId field to avoid unique constraint issues
-    // Don't pre-hash the password - let the model's pre('save') hook handle it
     const userData = {
-      name, 
-      email, 
-      password: password, 
+      name, email, password,
       accountType: accountType === 'host' ? 'host' : 'traveller',
       isVerified: true
     };
 
-    if (accountType === 'host') {
-      user = new Host(userData);
-    } else {
-      user = new Traveler(userData);
-    }
-
+    const user = accountType === 'host' ? new Host(userData) : new Traveler(userData);
     await user.save();
-
-    // consume the verified email marker after successful signup
     verifiedEmails.delete(email);
 
     res.status(201).json({
       success: true,
       message: 'Signup successful!',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        accountType: user.accountType
-      }
+      user: { id: user._id, name: user.name, email: user.email, accountType: user.accountType }
     });
-
   } catch (err) {
-    console.error('Signup error:', err);
-    
-    // ✅ Handle duplicate key error specifically
     if (err.code === 11000) {
-      if (err.keyPattern && err.keyPattern.googleId) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Database configuration error. Please try again or contact support.' 
-        });
-      }
-      if (err.keyPattern && err.keyPattern.email) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'User with this email already exists' 
-        });
-      }
+      return res.status(400).json({ success: false, message: 'User already exists' });
     }
-    
-    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// ------------------- USER LOGIN -------------------
+// Login
 app.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ success: false, message: 'Email and password required' });
+    if (!email || !password) return res.status(400).json({ success: false, message: 'Email & password required' });
 
-    // Check both collections
-    let user = await Traveler.findOne({ email }).select('+password');
-    if (!user) {
-      user = await Host.findOne({ email }).select('+password');
+    let user = await Traveler.findOne({ email }).select('+password') ||
+               await Host.findOne({ email }).select('+password');
+
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    if (!user) return res.status(400).json({ success: false, message: 'User not found' });
+    req.login(user, async (err) => {
+      if (err) return res.status(500).json({ success: false, message: 'Login failed' });
 
-    const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid)
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-
-    // Login user with passport
-    req.login(user, (err) => {
-      if (err) {
-        return res.status(500).json({ success: false, message: 'Login failed' });
-      }
-      
       const token = jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET || 'myjwtsecret', { expiresIn: '1d' });
 
-      // Prepare response data
       const userData = {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        accountType: user.accountType
+        id: user._id, name: user.name, email: user.email, accountType: user.accountType
       };
 
-      // For travelers, include liked rooms and viewed history
       if (user.accountType === 'traveller') {
         userData.likedRooms = user.likedRooms || [];
         userData.viewedRooms = user.viewedRooms || [];
       }
 
-      res.json({
-        success: true,
-        message: 'Login successful',
-        token,
-        user: userData
-      });
+      res.json({ success: true, message: 'Login successful', token, user: userData });
     });
-
   } catch (err) {
-    console.error('Login error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// ✅ Add a test route to check if user is authenticated
+// Profile (Authenticated)
 app.get('/profile', (req, res) => {
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ success: false, message: 'Not authenticated' });
-  }
+  if (!req.isAuthenticated()) return res.status(401).json({ success: false, message: 'Not authenticated' });
   res.json({
     success: true,
-    user: {
-      id: req.user._id,
-      name: req.user.name,
-      email: req.user.email,
-      accountType: req.user.accountType
-    }
+    user: { id: req.user._id, name: req.user.name, email: req.user.email, accountType: req.user.accountType }
   });
 });
 
-// ✅ Logout route
+// Logout
 app.post('/logout', (req, res) => {
-  req.logout((err) => {
-    if (err) {
-      return res.status(500).json({ success: false, message: 'Logout failed' });
-    }
-    req.session.destroy();
-    res.json({ success: true, message: 'Logged out successfully' });
-  });
+  req.logout(() => {});
+  req.session.destroy();
+  res.json({ success: true, message: 'Logged out' });
 });
 
-// ------------------- JWT AUTHENTICATION MIDDLEWARE -------------------
+// ==================== JWT MIDDLEWARE ====================
+
 const authenticateToken = async (req, res, next) => {
+  const token = req.headers['authorization']?.split(' ')[1];
+  if (!token) return res.status(401).json({ success: false, message: 'Token required' });
+
   try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-      return res.status(401).json({ success: false, message: 'Access token required' });
-    }
-
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'myjwtsecret');
-    
-    // Find user in database
-    let user = await Traveler.findById(decoded.id);
-    if (!user) {
-      user = await Host.findById(decoded.id);
-    }
-
-    if (!user) {
-      return res.status(401).json({ success: false, message: 'User not found' });
-    }
-
+    const user = await Traveler.findById(decoded.id) || await Host.findById(decoded.id);
+    if (!user) return res.status(401).json({ success: false, message: 'User not found' });
     req.user = user;
     next();
   } catch (err) {
-    console.error('Token verification error:', err);
-    return res.status(403).json({ success: false, message: 'Invalid or expired token' });
+    res.status(403).json({ success: false, message: 'Invalid token' });
   }
 };
 
-// ------------------- TRAVELER LIKED ROOMS ENDPOINTS -------------------
-// Update liked rooms for a traveler
+// ==================== TRAVELER FEATURES ====================
+
+// Liked Rooms
 app.post('/api/traveler/liked-rooms', authenticateToken, async (req, res) => {
-  try {
-    const { roomId, action } = req.body; // action: 'add' or 'remove'
+  if (req.user.accountType !== 'traveller') return res.status(403).json({ success: false, message: 'Traveler only' });
 
-    if (!req.user || req.user.accountType !== 'traveller') {
-      return res.status(403).json({ success: false, message: 'Only travelers can use this endpoint' });
-    }
+  const { roomId, action } = req.body;
+  const traveler = await Traveler.findById(req.user._id);
+  if (!traveler) return res.status(404).json({ success: false, message: 'Not found' });
 
-    const traveler = await Traveler.findById(req.user._id);
-    if (!traveler) {
-      return res.status(404).json({ success: false, message: 'Traveler not found' });
-    }
-
-    if (!traveler.likedRooms) {
-      traveler.likedRooms = [];
-    }
-
-    if (action === 'add') {
-      if (!traveler.likedRooms.includes(roomId)) {
-        traveler.likedRooms.push(roomId);
-      }
-    } else if (action === 'remove') {
-      traveler.likedRooms = traveler.likedRooms.filter(id => id !== roomId);
-    } else {
-      return res.status(400).json({ success: false, message: 'Invalid action. Use "add" or "remove"' });
-    }
-
-    await traveler.save();
-
-    res.json({
-      success: true,
-      message: `Room ${action === 'add' ? 'added to' : 'removed from'} wishlist`,
-      likedRooms: traveler.likedRooms
-    });
-  } catch (err) {
-    console.error('Error updating liked rooms:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+  traveler.likedRooms = traveler.likedRooms || [];
+  if (action === 'add' && !traveler.likedRooms.includes(roomId)) {
+    traveler.likedRooms.push(roomId);
+  } else if (action === 'remove') {
+    traveler.likedRooms = traveler.likedRooms.filter(id => id !== roomId);
+  } else {
+    return res.status(400).json({ success: false, message: 'Invalid action' });
   }
+
+  await traveler.save();
+  res.json({ success: true, likedRooms: traveler.likedRooms });
 });
 
-// Get liked rooms for a traveler
 app.get('/api/traveler/liked-rooms', authenticateToken, async (req, res) => {
-  try {
-    if (!req.user || req.user.accountType !== 'traveller') {
-      return res.status(403).json({ success: false, message: 'Only travelers can use this endpoint' });
-    }
-
-    const traveler = await Traveler.findById(req.user._id);
-    if (!traveler) {
-      return res.status(404).json({ success: false, message: 'Traveler not found' });
-    }
-
-    res.json({
-      success: true,
-      likedRooms: traveler.likedRooms || []
-    });
-  } catch (err) {
-    console.error('Error fetching liked rooms:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
+  if (req.user.accountType !== 'traveller') return res.status(403).json({ success: false, message: 'Traveler only' });
+  const traveler = await Traveler.findById(req.user._id);
+  res.json({ success: true, likedRooms: traveler?.likedRooms || [] });
 });
 
-// ------------------- TRAVELER VIEWED ROOMS (HISTORY) ENDPOINTS -------------------
-// Add room to viewing history
+// Viewed Rooms (History)
 app.post('/api/traveler/viewed-rooms', authenticateToken, async (req, res) => {
-  try {
-    const { roomId } = req.body;
+  if (req.user.accountType !== 'traveller') return res.status(403).json({ success: false, message: 'Traveler only' });
+  const { roomId } = req.body;
+  if (!roomId) return res.status(400).json({ success: false, message: 'roomId required' });
 
-    if (!req.user || req.user.accountType !== 'traveller') {
-      return res.status(403).json({ success: false, message: 'Only travelers can use this endpoint' });
-    }
+  const traveler = await Traveler.findById(req.user._id);
+  traveler.viewedRooms = traveler.viewedRooms || [];
+  traveler.viewedRooms = traveler.viewedRooms.filter(r => r.roomId !== roomId);
+  traveler.viewedRooms.unshift({ roomId, viewedAt: new Date() });
+  if (traveler.viewedRooms.length > 50) traveler.viewedRooms.pop();
 
-    if (!roomId) {
-      return res.status(400).json({ success: false, message: 'Room ID is required' });
-    }
-
-    const traveler = await Traveler.findById(req.user._id);
-    if (!traveler) {
-      return res.status(404).json({ success: false, message: 'Traveler not found' });
-    }
-
-    if (!traveler.viewedRooms) {
-      traveler.viewedRooms = [];
-    }
-
-    // Remove existing entry for this room if exists (to update timestamp)
-    traveler.viewedRooms = traveler.viewedRooms.filter(entry => entry.roomId !== roomId);
-
-    // Add new entry at the beginning
-    traveler.viewedRooms.unshift({
-      roomId: roomId,
-      viewedAt: new Date()
-    });
-
-    // Keep only last 50 viewed rooms
-    if (traveler.viewedRooms.length > 50) {
-      traveler.viewedRooms = traveler.viewedRooms.slice(0, 50);
-    }
-
-    await traveler.save();
-
-    res.json({
-      success: true,
-      message: 'Room added to history',
-      viewedRooms: traveler.viewedRooms
-    });
-  } catch (err) {
-    console.error('Error updating viewed rooms:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
+  await traveler.save();
+  res.json({ success: true, viewedRooms: traveler.viewedRooms });
 });
 
-// Get viewing history for a traveler
 app.get('/api/traveler/viewed-rooms', authenticateToken, async (req, res) => {
-  try {
-    if (!req.user || req.user.accountType !== 'traveller') {
-      return res.status(403).json({ success: false, message: 'Only travelers can use this endpoint' });
-    }
-
-    const traveler = await Traveler.findById(req.user._id);
-    if (!traveler) {
-      return res.status(404).json({ success: false, message: 'Traveler not found' });
-    }
-
-    res.json({
-      success: true,
-      viewedRooms: traveler.viewedRooms || []
-    });
-  } catch (err) {
-    console.error('Error fetching viewed rooms:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
+  if (req.user.accountType !== 'traveller') return res.status(403).json({ success: false, message: 'Traveler only' });
+  const traveler = await Traveler.findById(req.user._id);
+  res.json({ success: true, viewedRooms: traveler?.viewedRooms || [] });
 });
 
-// ------------------- FORGOT PASSWORD -------------------
+// ==================== PASSWORD RESET ====================
+
 app.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
-    
-    if (!email) {
-      return res.status(400).json({ success: false, message: 'Email is required' });
-    }
+    if (!email) return res.status(400).json({ success: false, message: 'Email required' });
 
-    // Check if user exists in both collections
-    let user = await Traveler.findOne({ email });
-    if (!user) {
-      user = await Host.findOne({ email });
-    }
+    const user = await Traveler.findOne({ email }) || await Host.findOne({ email });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    // Generate reset token (simple implementation - in production use crypto.randomBytes)
     const resetToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    const resetTokenExpires = new Date(Date.now() + 3600000); // 1 hour
-
-    // Store reset token in user document
     user.resetToken = resetToken;
-    user.resetTokenExpires = resetTokenExpires;
+    user.resetTokenExpires = Date.now() + 3600000;
     await user.save();
 
-    // Send reset email using the same configuration as OTP emails
     const emailUser = process.env.EMAIL_USER || process.env.EMAIL;
     const hasEmailCreds = Boolean(emailUser && process.env.EMAIL_PASS);
     const isProd = process.env.NODE_ENV === 'production';
 
+    const resetLink = `http://localhost:3000/reset-password?email=${encodeURIComponent(email)}&token=${resetToken}`;
+
     if (!hasEmailCreds && !isProd) {
-      // Dev fallback: no email creds; return reset link to help local testing
-      const resetLink = `http://localhost:3000/reset-password?email=${encodeURIComponent(email)}&token=${resetToken}`;
-      console.log(`🔧 Password reset link for ${email}: ${resetLink}`);
-      return res.json({
-        success: true,
-        message: 'Password reset instructions sent to your email',
-        resetLink: resetLink // For development
-      });
+      console.log(`DEV RESET LINK: ${resetLink}`);
+      return res.json({ success: true, message: 'Check console for link', resetLink });
     }
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',
-      auth: {
-        user: emailUser,
-        pass: process.env.EMAIL_PASS
-      }
+      auth: { user: emailUser, pass: process.env.EMAIL_PASS }
     });
 
-    const resetLink = `http://localhost:3000/reset-password?email=${encodeURIComponent(email)}&token=${resetToken}`;
-    
-    const mailOptions = {
+    await transporter.sendMail({
       from: emailUser,
       to: email,
       subject: 'Password Reset - ShelterSeek',
-      text: `Hello ${user.name},\n\nYou requested a password reset for your ShelterSeek account.\n\nClick the link below to reset your password:\n${resetLink}\n\nThis link will expire in 1 hour.\n\nIf you didn't request this reset, please ignore this email.\n\nBest regards,\nShelterSeek Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Password Reset Request</h2>
-          <p>Hello ${user.name},</p>
-          <p>You requested a password reset for your ShelterSeek account.</p>
-          <p>Click the button below to reset your password:</p>
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
-          </div>
-          <p style="color: #666; font-size: 14px;">This link will expire in 1 hour.</p>
-          <p style="color: #666; font-size: 14px;">If you didn't request this reset, please ignore this email.</p>
-          <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-          <p style="color: #999; font-size: 12px;">Best regards,<br>ShelterSeek Team</p>
-        </div>
-      `
-    };
+      html: `<p>Click <a href="${resetLink}">here</a> to reset your password. Expires in 1 hour.</p>`
+    });
 
-    try {
-      await transporter.sendMail(mailOptions);
-      console.log(`✅ Password reset email sent to ${email}`);
-      
-      res.json({
-        success: true,
-        message: 'Password reset instructions sent to your email'
-      });
-    } catch (error) {
-      console.error('❌ Password reset email error:', error);
-      if (!isProd) {
-        // Dev fallback on error: still return reset link to unblock
-        const resetLink = `http://localhost:3000/reset-password?email=${encodeURIComponent(email)}&token=${resetToken}`;
-        console.log(`🔧 Password reset link for ${email}: ${resetLink}`);
-        return res.json({
-          success: true,
-          message: 'Password reset instructions sent to your email',
-          resetLink: resetLink // For development
-        });
-      }
-      throw error;
-    }
-
+    res.json({ success: true, message: 'Reset email sent' });
   } catch (err) {
-    console.error('Forgot password error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// ------------------- RESET PASSWORD -------------------
 app.post('/reset-password', async (req, res) => {
   try {
     const { email, token, newPassword } = req.body;
-    
-    if (!email || !token || !newPassword) {
-      return res.status(400).json({ success: false, message: 'Email, token, and new password are required' });
+    if (!email || !token || !newPassword || newPassword.length < 8) {
+      return res.status(400).json({ success: false, message: 'Invalid input' });
     }
 
-    if (newPassword.length < 8) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters long' });
-    }
+    const user = await Traveler.findOne({ email, resetToken: token, resetTokenExpires: { $gt: Date.now() } }) ||
+                 await Host.findOne({ email, resetToken: token, resetTokenExpires: { $gt: Date.now() } });
 
-    // Find user with valid reset token
-    let user = await Traveler.findOne({ 
-      email, 
-      resetToken: token,
-      resetTokenExpires: { $gt: new Date() }
-    });
-    
-    if (!user) {
-      user = await Host.findOne({ 
-        email, 
-        resetToken: token,
-        resetTokenExpires: { $gt: new Date() }
-      });
-    }
+    if (!user) return res.status(400).json({ success: false, message: 'Invalid or expired token' });
 
-    if (!user) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired reset token' });
-    }
-
-    // Update password (let the pre('save') hook handle hashing)
     user.password = newPassword;
     user.resetToken = undefined;
     user.resetTokenExpires = undefined;
     await user.save();
 
-    res.json({
-      success: true,
-      message: 'Password reset successful'
-    });
-
+    res.json({ success: true, message: 'Password reset successful' });
   } catch (err) {
-    console.error('Reset password error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// ------------------- API ROOMS ENDPOINT -------------------
-const RoomData = require('./model/room');
+// ==================== ROOMS & BOOKINGS ====================
 
 app.get('/api/rooms', async (req, res) => {
   try {
-    console.log('🔍 Fetching rooms from database...');
-    
-    // Fetch verified rooms that are not booked
-    // Also check for status 'verified' or 'approved' (case insensitive)
-    const rooms = await RoomData.find({ 
-      $or: [
-        { status: { $regex: /^verified$/i } },
-        { status: { $regex: /^approved$/i } }
-      ],
-      booking: { $ne: true } // Exclude booked rooms
+    const rooms = await RoomData.find({
+      $or: [{ status: /verified/i }, { status: /approved/i }],
+      booking: { $ne: true }
     }).lean();
-    
-    console.log(`✅ Found ${rooms.length} available rooms`);
-    
-    // Process room data for the frontend
-    const processedRooms = rooms.map(room => ({
-      _id: room._id?.toString(),
-      id: room.id || room._id?.toString(),
-      name: room.name || 'Unknown Host',
-      email: room.email || '',
-      title: room.title || 'Untitled Room',
-      description: room.description || 'No description available',
-      price: room.price || 0,
-      location: room.location || 'Location not specified',
-      coordinates: room.coordinates || { lat: 13.0827, lng: 80.2707 },
-      images: room.images || [],
-      status: room.status || 'pending',
-      amenities: room.amenities || [],
-      availability: room.availability || [],
-      propertyType: room.propertyType || '',
-      capacity: room.capacity || 0,
-      roomType: room.roomType || '',
-      bedrooms: room.bedrooms || 0,
-      beds: room.beds || 0,
-      maxdays: room.maxdays || room.maxDays || 10,
-      roomSize: room.roomSize || 'Medium',
-      roomLocation: room.roomLocation || '',
-      transportDistance: room.transportDistance || '',
-      hostGender: room.hostGender || '',
-      foodFacility: room.foodFacility || '',
-      discount: room.discount || 0,
-      likes: room.likes || 0,
-      reviews: room.reviews || [],
-      booking: room.booking || false,
-      createdAt: room.createdAt
+
+    const processed = rooms.map(r => ({
+      _id: r._id.toString(),
+      id: r._id.toString(),
+      name: r.name || 'Unknown',
+      title: r.title || 'Untitled',
+      description: r.description || '',
+      price: r.price || 0,
+      location: r.location || '',
+      coordinates: r.coordinates || { lat: 13.0827, lng: 80.2707 },
+      images: r.images || [],
+      amenities: r.amenities || [],
+      availability: r.availability || [],
+      propertyType: r.propertyType || '',
+      capacity: r.capacity || 0,
+      roomType: r.roomType || '',
+      bedrooms: r.bedrooms || 0,
+      beds: r.beds || 0,
+      maxdays: r.maxdays || 10,
+      roomSize: r.roomSize || 'Medium',
+      hostGender: r.hostGender || '',
+      foodFacility: r.foodFacility || '',
+      discount: r.discount || 0,
+      likes: r.likes || 0,
+      reviews: r.reviews || [],
+      booking: false,
+      createdAt: r.createdAt
     }));
 
-    res.json({
-      status: 'success',
-      data: processedRooms
-    });
-
+    res.json({ status: 'success', data: processed });
   } catch (error) {
-    console.error('❌ Error fetching rooms:', error);
-    res.status(500).json({
-      status: 'error',
-      message: 'Failed to fetch rooms',
-      error: error.message
-    });
+    res.status(500).json({ status: 'error', message: 'Failed to fetch rooms' });
   }
 });
 
-// ------------------- BOOKING ENDPOINTS -------------------
-// Create a new booking
+// Create Booking
 app.post('/api/bookings', authenticateToken, async (req, res) => {
-  try {
-    const { roomId, checkIn, checkOut, days, totalCost, hostEmail } = req.body;
-
-    if (!roomId || !checkIn || !checkOut || !days || !totalCost) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Missing required booking information' 
-      });
-    }
-
-    // Check if room exists and is available
-    const room = await RoomData.findById(roomId);
-    if (!room) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Room not found' 
-      });
-    }
-
-    if (room.booking === true) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Room is already booked' 
-      });
-    }
-
-    // Create booking record (you might want to create a separate Booking model)
-    // For now, we'll just mark the room as booked
-    room.booking = true;
-    await room.save();
-
-    res.json({
-      success: true,
-      message: 'Booking created successfully',
-      booking: {
-        roomId: roomId,
-        checkIn: checkIn,
-        checkOut: checkOut,
-        days: days,
-        totalCost: totalCost,
-        hostEmail: hostEmail
-      }
-    });
-
-  } catch (err) {
-    console.error('Error creating booking:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error',
-      error: err.message 
-    });
+  const { roomId, checkIn, checkOut, days, totalCost } = req.body;
+  if (!roomId || !checkIn || !checkOut || !days || !totalCost) {
+    return res.status(400).json({ success: false, message: 'Missing fields' });
   }
+
+  const room = await RoomData.findById(roomId);
+  if (!room || room.booking) {
+    return res.status(400).json({ success: false, message: 'Room unavailable' });
+  }
+
+  room.booking = true;
+  await room.save();
+
+  res.json({ success: true, message: 'Booking confirmed', booking: { roomId, checkIn, checkOut, days, totalCost } });
 });
 
-// Mark room as booked
+// Update Booking Status
 app.put('/api/rooms/:roomId/book', authenticateToken, async (req, res) => {
-  try {
-    const { roomId } = req.params;
-    const { booking, bookedDates } = req.body;
+  const { booking = true } = req.body;
+  const room = await RoomData.findById(req.params.roomId);
+  if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
 
-    const room = await RoomData.findById(roomId);
-    if (!room) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Room not found' 
-      });
-    }
+  room.booking = booking;
+  await room.save();
 
-    room.booking = booking !== undefined ? booking : true;
-    
-    // Optionally store booked dates
-    if (bookedDates && bookedDates.checkIn && bookedDates.checkOut) {
-      // You could add a bookedDates field to the schema if needed
-      // For now, we'll just mark it as booked
-    }
-
-    await room.save();
-
-    res.json({
-      success: true,
-      message: `Room ${booking ? 'marked as booked' : 'marked as available'}`,
-      room: {
-        _id: room._id,
-        booking: room.booking
-      }
-    });
-
-  } catch (err) {
-    console.error('Error updating booking status:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error',
-      error: err.message 
-    });
-  }
+  res.json({ success: true, message: `Room ${booking ? 'booked' : 'freed'}`, room: { _id: room._id, booking: room.booking } });
 });
 
-// ✅ Health check route
-app.get('/health', (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Server is running', 
-    timestamp: new Date().toISOString() 
+// ==================== DEBUG & HEALTH ====================
+
+app.get('/debug-env', (req, res) => {
+  res.json({
+    EMAIL_USER: process.env.EMAIL_USER || 'Not set',
+    EMAIL_PASS: process.env.EMAIL_PASS ? `Set (${process.env.EMAIL_PASS.length})` : 'Not set',
+    NODE_ENV: process.env.NODE_ENV,
+    MONGODB_URI: process.env.MONGODB_URI ? 'Set' : 'Not set'
   });
 });
 
-// ✅ API status route
+app.get('/health', (req, res) => {
+  res.json({ success: true, message: 'Server running', timestamp: new Date().toISOString() });
+});
+
 app.get('/api/status', (req, res) => {
   res.json({
     success: true,
-    message: 'API is working',
-    endpoints: {
-      auth: '/auth',
-      rooms: '/api/rooms',
-      health: '/health'
-    },
+    message: 'API working',
     database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
   });
 });
 
+// ==================== START SERVER ====================
+
 app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-  console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`📧 Email User: ${process.env.EMAIL_USER || process.env.EMAIL || 'Not configured'}`);
-  console.log(`🏠 Rooms API: http://localhost:${PORT}/api/rooms`);
-  console.log(`❤️ Health Check: http://localhost:${PORT}/health`);
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Email: ${process.env.EMAIL_USER || process.env.EMAIL || 'Not set'}`);
+  console.log(`Rooms: http://localhost:${PORT}/api/rooms`);
+  console.log(`Health: http://localhost:${PORT}/health`);
 });

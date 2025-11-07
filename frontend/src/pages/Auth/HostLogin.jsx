@@ -103,7 +103,7 @@ const HostLogin = () => {
       
       localStorage.setItem('token', loginData.token);
       localStorage.setItem('user', JSON.stringify(loginData.user));
-      navigate('/hostPage');
+      navigate('/host_index');
     } catch (err) {
       setError(err.message);
     } finally {
