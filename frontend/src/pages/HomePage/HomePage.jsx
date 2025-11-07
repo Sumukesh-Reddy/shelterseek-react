@@ -10,6 +10,7 @@ import ExplorerButton from '../../components/ExploreButton/ExploreButton.jsx';
 import Footer from '../../components/Footer/Footer';
 import './HomePage.css';
 
+
 const HomePage = () => {
   const [showFilter, setShowFilter] = useState(false);
   const [filters, setFilters] = useState({

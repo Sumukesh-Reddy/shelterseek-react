@@ -24,14 +24,18 @@ const roomDataSchema = new mongoose.Schema({
   description: String,
   price: Number,
   location: String,
-  coordinates: Object,
+  coordinates: {
+    lat: Number,
+    lng: Number
+  },
   propertyType: String,
   capacity: Number,
   roomType: String,
   bedrooms: Number,
   beds: Number,
-  maxDays: Number,
+  maxdays: Number, 
   roomSize: String,
+  roomLocation: String, 
   transportDistance: String,
   hostGender: String,
   foodFacility: String,
@@ -54,9 +58,12 @@ const roomDataSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  availability: [{
+    type: Date
+  }], // Added availability array
   amenities: [String],
-  images: [String],
-  reviews: [String],
+  images: [mongoose.Schema.Types.ObjectId], 
+  reviews: [Object], 
   
   createdAt: {
     type: Date,

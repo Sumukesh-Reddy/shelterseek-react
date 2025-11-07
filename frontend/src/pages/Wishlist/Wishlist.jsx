@@ -14,8 +14,44 @@ const Wishlist = () => {
   useEffect(() => {
     const fetchLikedRooms = async () => {
       try {
-        // Get liked room IDs from localStorage
-        const likedHomes = JSON.parse(localStorage.getItem('likedHomes') || '[]');
+        let likedHomes = [];
+        
+        // Try to fetch from MongoDB if user is logged in as traveler
+        const token = localStorage.getItem('token');
+        const userStr = localStorage.getItem('user');
+        
+        if (token && userStr) {
+          try {
+            const user = JSON.parse(userStr);
+            if (user.accountType === 'traveller') {
+              const response = await fetch('http://localhost:3001/api/traveler/liked-rooms', {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              
+              if (response.ok) {
+                const data = await response.json();
+                likedHomes = data.likedRooms || [];
+                // Update localStorage with data from MongoDB
+                localStorage.setItem('likedHomes', JSON.stringify(likedHomes));
+              } else {
+                // Fallback to localStorage if API call fails
+                likedHomes = JSON.parse(localStorage.getItem('likedHomes') || '[]');
+              }
+            } else {
+              // Not a traveler, use localStorage
+              likedHomes = JSON.parse(localStorage.getItem('likedHomes') || '[]');
+            }
+          } catch (err) {
+            console.error('Error fetching liked rooms from MongoDB:', err);
+            // Fallback to localStorage if API call fails
+            likedHomes = JSON.parse(localStorage.getItem('likedHomes') || '[]');
+          }
+        } else {
+          // Not logged in, use localStorage
+          likedHomes = JSON.parse(localStorage.getItem('likedHomes') || '[]');
+        }
         
         if (likedHomes.length === 0) {
           setLoading(false);

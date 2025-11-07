@@ -15,17 +15,26 @@ const About = () => {
   useEffect(() => {
     const fetchUserCounts = async () => {
       try {
-        const response = await fetch('http:localhost:3001/api/user-counts');
+        const response = await fetch('http://localhost:3001/api/user-counts');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
+        console.log('User counts data:', data); // Debug log
+        
         if (data.success) {
           animateCount(data.travelerCount, setTravelerCount);
           animateCount(data.hostCount, setHostCount);
         } else {
+          console.warn('API returned success: false, using fallback numbers');
           setTravelerCount(10000);
           setHostCount(5000);
         }
       } catch (error) {
         console.error('Error fetching user counts:', error);
+        // Use fallback numbers
         setTravelerCount(10000);
         setHostCount(5000);
       }
@@ -106,7 +115,7 @@ const About = () => {
               <div className="stat-label">Verified Hosts</div>
             </div>
             <div className="stat-item">
-              <div className="stat-number">120+</div>
+              <div className="stat-number">1+</div>
               <div className="stat-label">Countries</div>
             </div>
             <div className="stat-item">
@@ -121,7 +130,7 @@ const About = () => {
         
           <div className="team-members">
             <div className="team-member">
-              <img src="/images/bobby.jpg" alt="M. Sumukesh Reddy" />
+              <img src="/images/sumukesh1.jpg" alt="M. Sumukesh Reddy" />
               <h3>M. Sumukesh Reddy</h3>
               <p className="role">Traveller Experience Lead</p>
               <p className="bio">

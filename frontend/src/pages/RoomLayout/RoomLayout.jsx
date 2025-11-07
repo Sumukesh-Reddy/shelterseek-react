@@ -47,9 +47,20 @@ const RoomLayout = () => {
       }
       return "medium";
     };
+
+    // Process availability dates
+    const processAvailability = (availability) => {
+      if (!Array.isArray(availability)) return [];
+      return availability.map(date => {
+        if (date instanceof Date) return date;
+        if (typeof date === 'string') return new Date(date);
+        if (date && date.$date) return new Date(date.$date);
+        return null;
+      }).filter(date => date && !isNaN(date.getTime()));
+    };
     
     return {
-      id: roomData._id,
+      id: roomData._id || roomData.id,
       title: roomData.title || "Untitled Property",
       location: roomData.location || "Location not specified",
       price: parseFloat(roomData.price) || 0,
@@ -69,14 +80,15 @@ const RoomLayout = () => {
         latitude: roomData.coordinates?.lat || 0,
         longitude: roomData.coordinates?.lng || 0
       },
-      maxdays: roomData.maxStayDays || 10,
+      maxdays: roomData.maxdays || roomData.maxDays || 10,
+      availability: processAvailability(roomData.availability),
       media: processImagePaths(roomData.images),
       review_main: roomData.reviews || [],
       amenities: {
-        wifi: roomData.amenities?.includes("wifi") || false,
-        ac: roomData.amenities?.includes("ac") || false,
-        laundry: roomData.amenities?.includes("laundry") || false,
-        hotWater: roomData.amenities?.includes("hotWater") || false,
+        wifi: roomData.amenities?.includes("WiFi") || roomData.amenities?.includes("wifi") || false,
+        ac: roomData.amenities?.includes("Air Conditioning") || roomData.amenities?.includes("ac") || false,
+        laundry: roomData.amenities?.includes("Laundry") || roomData.amenities?.includes("laundry") || false,
+        hotWater: roomData.amenities?.includes("Hot Water") || roomData.amenities?.includes("hotWater") || false,
         taps: roomData.amenities?.includes("taps") || false,
         lift: roomData.amenities?.includes("lift") || false,
         carParking: roomData.amenities?.includes("carParking") || false,
@@ -99,6 +111,28 @@ const RoomLayout = () => {
           const foundRoom = result.data.find(h => h._id === id);
           if (foundRoom) {
             setRoom(processRoomData(foundRoom));
+            
+            // Track viewing history in MongoDB if user is logged in as traveler
+            const token = localStorage.getItem('token');
+            const userStr = localStorage.getItem('user');
+            if (token && userStr) {
+              try {
+                const user = JSON.parse(userStr);
+                if (user.accountType === 'traveller') {
+                  await fetch('http://localhost:3001/api/traveler/viewed-rooms', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ roomId: id })
+                  });
+                }
+              } catch (err) {
+                console.error('Error tracking viewing history:', err);
+                // Continue even if history tracking fails
+              }
+            }
           } else {
             setError("Room not found");
           }
@@ -179,9 +213,10 @@ const RoomLayout = () => {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const isLiked = likedHomes.includes(room.id);
     let updatedLikes;
+    const action = isLiked ? 'remove' : 'add';
     
     if (isLiked) {
       updatedLikes = likedHomes.filter(id => id !== room.id);
@@ -191,14 +226,112 @@ const RoomLayout = () => {
     
     setLikedHomes(updatedLikes);
     localStorage.setItem("likedHomes", JSON.stringify(updatedLikes));
+    
+    // Sync to MongoDB if user is logged in as traveler
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+    if (token && userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        if (user.accountType === 'traveller') {
+          const response = await fetch('http://localhost:3001/api/traveler/liked-rooms', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ roomId: room.id, action })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            // Update localStorage with latest data from server
+            if (data.likedRooms) {
+              localStorage.setItem("likedHomes", JSON.stringify(data.likedRooms));
+              setLikedHomes(data.likedRooms);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error syncing liked rooms to MongoDB:', err);
+        // Continue with local storage update even if sync fails
+      }
+    }
   };
 
-  const handleCheckInChange = (e) => {
-    setCheckInDate(e.target.value);
+  const handleDateClick = (dateString) => {
+    if (!checkInDate) {
+      // Set check-in date
+      setCheckInDate(dateString);
+    } else if (!checkOutDate) {
+      // Set check-out date
+      if (dateString <= checkInDate) {
+        // If clicked date is before or equal to check-in, set it as new check-in
+        setCheckInDate(dateString);
+        setCheckOutDate('');
+      } else {
+        // Validate that all dates between check-in and selected date are available
+        const checkIn = new Date(checkInDate);
+        const checkOut = new Date(dateString);
+        const selectedDates = [];
+        for (let d = new Date(checkIn); d <= checkOut; d.setDate(d.getDate() + 1)) {
+          selectedDates.push(new Date(d).toISOString().split('T')[0]);
+        }
+        
+        const availableDates = room.availability?.map(d => {
+          const dDate = new Date(d);
+          return dDate.toISOString().split('T')[0];
+        }) || [];
+        
+        const allDatesAvailable = selectedDates.every(date => availableDates.includes(date));
+        if (allDatesAvailable) {
+          setCheckOutDate(dateString);
+        } else {
+          showErrorMessage("Selected date range includes unavailable dates. Please select consecutive available dates.");
+        }
+      }
+    } else {
+      // Reset and set new check-in
+      setCheckInDate(dateString);
+      setCheckOutDate('');
+    }
   };
 
-  const handleCheckOutChange = (e) => {
-    setCheckOutDate(e.target.value);
+  const clearDates = () => {
+    setCheckInDate('');
+    setCheckOutDate('');
+  };
+
+  // Check if a date is in the selected range
+  const isDateInRange = (dateString) => {
+    if (!checkInDate || !checkOutDate) return false;
+    const date = new Date(dateString);
+    const checkIn = new Date(checkInDate);
+    const checkOut = new Date(checkOutDate);
+    return date >= checkIn && date <= checkOut;
+  };
+
+  // Check if a date is available
+  const isDateAvailable = (dateString) => {
+    if (!room || !room.availability || room.availability.length === 0) {
+      return true; // No restrictions
+    }
+    const date = new Date(dateString).toISOString().split('T')[0];
+    const availableDates = room.availability.map(d => {
+      const dDate = new Date(d);
+      return dDate.toISOString().split('T')[0];
+    });
+    return availableDates.includes(date);
+  };
+
+  // Format date for display
+  const formatDateDisplay = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
   };
 
   const handleRent = () => {
@@ -221,9 +354,28 @@ const RoomLayout = () => {
       return;
     }
 
+    // Validate that all selected dates are in availability
+    if (room.availability && room.availability.length > 0) {
+      const selectedDates = [];
+      for (let d = new Date(checkIn); d < checkOut; d.setDate(d.getDate() + 1)) {
+        selectedDates.push(new Date(d).toISOString().split('T')[0]);
+      }
+      
+      const availableDates = room.availability.map(date => {
+        const d = new Date(date);
+        return d.toISOString().split('T')[0];
+      });
+      
+      const allDatesAvailable = selectedDates.every(date => availableDates.includes(date));
+      if (!allDatesAvailable) {
+        showErrorMessage("Selected dates are not all available. Please select from available dates only.");
+        return;
+      }
+    }
+
     const pricePerNight = parseFloat(room.price);
     const totalCost = days * pricePerNight * (1 - (room.discountPercentage || 0) / 100);
-    window.location.href = `/payment?id=${room.id}&checkIn=${checkInDate}&checkOut=${checkOutDate}&cost=${totalCost}&mail=${room.host.email}`;
+    navigate(`/payment?id=${room.id}&checkIn=${checkInDate}&checkOut=${checkOutDate}&days=${days}&cost=${totalCost}&mail=${encodeURIComponent(room.host.email)}&title=${encodeURIComponent(room.title)}&location=${encodeURIComponent(room.location)}`);
   };
 
   const showErrorMessage = (message) => {
@@ -304,6 +456,19 @@ const RoomLayout = () => {
 
   const isLiked = likedHomes.includes(room.id);
   const today = new Date().toISOString().split('T')[0];
+  
+  // Get available dates from availability array
+  const getAvailableDates = () => {
+    if (!room.availability || room.availability.length === 0) {
+      return null; // No restrictions if no availability array
+    }
+    return room.availability.map(date => {
+      const d = new Date(date);
+      return d.toISOString().split('T')[0];
+    }).filter(date => date >= today).sort();
+  };
+
+  const availableDates = getAvailableDates();
 
   return (
     <>
@@ -442,24 +607,117 @@ const RoomLayout = () => {
                 <strong>Maximum Days:</strong>
                 <span> {room.maxdays || 'NOT SPECIFIED'} Days</span>
               </p>
-              <label htmlFor="room-check-in">Check-in Date:</label>
-              <input 
-                type="date" 
-                id="room-check-in" 
-                name="check-in"
-                min={today}
-                value={checkInDate}
-                onChange={handleCheckInChange}
-              />
-              <label htmlFor="room-check-out">Check-out Date:</label>
-              <input 
-                type="date" 
-                id="room-check-out" 
-                name="check-out"
-                min={checkInDate || today}
-                value={checkOutDate}
-                onChange={handleCheckOutChange}
-              />
+              
+              {availableDates && availableDates.length > 0 ? (
+                <>
+                  <div style={{ marginBottom: '15px' }}>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                      Select Available Dates:
+                    </label>
+                    {checkInDate && (
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+                        <strong>Check-in:</strong> {formatDateDisplay(checkInDate)}
+                        {checkOutDate && (
+                          <>
+                            <br />
+                            <strong>Check-out:</strong> {formatDateDisplay(checkOutDate)}
+                          </>
+                        )}
+                        <button 
+                          onClick={clearDates}
+                          style={{
+                            marginLeft: '10px',
+                            padding: '2px 8px',
+                            fontSize: '11px',
+                            background: '#f0f0f0',
+                            border: '1px solid #ddd',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    )}
+                    {!checkInDate && (
+                      <p style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+                        Click on a date to select check-in
+                      </p>
+                    )}
+                    {checkInDate && !checkOutDate && (
+                      <p style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+                        Click on a date to select check-out
+                      </p>
+                    )}
+                  </div>
+                  
+                  <div className="available-dates-grid">
+                    {availableDates.map((dateStr) => {
+                      const isSelected = dateStr === checkInDate || dateStr === checkOutDate;
+                      const inRange = isDateInRange(dateStr);
+                      const isAvailable = isDateAvailable(dateStr);
+                      
+                      return (
+                        <button
+                          key={dateStr}
+                          type="button"
+                          onClick={() => isAvailable && handleDateClick(dateStr)}
+                          disabled={!isAvailable}
+                          className={`available-date-button ${
+                            dateStr === checkInDate ? 'check-in-date' : ''
+                          } ${
+                            dateStr === checkOutDate ? 'check-out-date' : ''
+                          } ${
+                            inRange && !isSelected ? 'in-range' : ''
+                          } ${
+                            !isAvailable ? 'unavailable' : ''
+                          }`}
+                          title={formatDateDisplay(dateStr)}
+                        >
+                          {new Date(dateStr).getDate()}
+                          <span style={{ fontSize: '10px', display: 'block' }}>
+                            {new Date(dateStr).toLocaleDateString('en-US', { month: 'short' })}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  
+                  <p style={{ fontSize: '11px', color: '#999', marginTop: '10px', textAlign: 'center' }}>
+                    {availableDates.length} available date{availableDates.length !== 1 ? 's' : ''}
+                  </p>
+                </>
+              ) : (
+                <div style={{ padding: '15px', background: '#f9f9f9', borderRadius: '8px', textAlign: 'center' }}>
+                  <p style={{ color: '#666', fontSize: '14px' }}>
+                    No availability restrictions. Please select dates using the calendar.
+                  </p>
+                  <label htmlFor="room-check-in" style={{ display: 'block', marginTop: '10px', marginBottom: '5px' }}>
+                    Check-in Date:
+                  </label>
+                  <input 
+                    type="date" 
+                    id="room-check-in" 
+                    name="check-in"
+                    min={today}
+                    value={checkInDate}
+                    onChange={(e) => setCheckInDate(e.target.value)}
+                    style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                  />
+                  <label htmlFor="room-check-out" style={{ display: 'block', marginTop: '10px', marginBottom: '5px' }}>
+                    Check-out Date:
+                  </label>
+                  <input 
+                    type="date" 
+                    id="room-check-out" 
+                    name="check-out"
+                    min={checkInDate || today}
+                    value={checkOutDate}
+                    onChange={(e) => setCheckOutDate(e.target.value)}
+                    style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                  />
+                </div>
+              )}
               <button 
                 id="room-rent-button" 
                 onClick={handleRent}
@@ -481,21 +739,29 @@ const RoomLayout = () => {
             <div className="room-host-info">
               <img 
                 src={
-                  room.host?.image 
-                    ? `http://localhost:3001/api/images//${room.host.image}`
-                    : '.../public/images/logo.png'
+                  room.host?.image && room.host.image.startsWith('http')
+                    ? room.host.image
+                    : room.host?.image && /^[0-9a-fA-F]{24}$/.test(room.host.image)
+                    ? `http://localhost:3001/api/images/${room.host.image}`
+                    : '/images/logo.png'
                 }
                 alt={`${room.host?.name || 'Host'} profile`}
                 className="room-host-image"
                 onError={(e) => {
                   e.target.onerror = null;
-                  e.target.src = '.../public/images/logo.png';
+                  e.target.src = '/images/logo.png';
                 }}
                 loading="lazy"
                 decoding="async"
               />
               <div className="room-host-details">
                 <h3>Hosted by {room.host.name || 'Unknown'}</h3>
+                <p style={{ fontSize: '14px', color: '#666', margin: '5px 0' }}>
+                  {room.host.gen && `Gender: ${room.host.gen}`}
+                </p>
+                <p style={{ fontSize: '14px', color: '#666', margin: '5px 0' }}>
+                  {room.host.email && `Email: ${room.host.email}`}
+                </p>
                 <button 
                   id="room-message" 
                   onClick={handleMessage}
