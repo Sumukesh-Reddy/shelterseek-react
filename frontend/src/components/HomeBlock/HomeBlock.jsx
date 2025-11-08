@@ -5,9 +5,29 @@ import './HomeBlock.css';
 const HomeBlock = ({ room }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const navigate = useNavigate();
-  const images = Array.isArray(room.images) && room.images.length > 0 
-    ? room.images 
-    : ['/images/default-house.jpg'];
+
+  // Process image paths - convert image IDs to URLs
+  const processImagePaths = (images) => {
+    if (!Array.isArray(images) || images.length === 0) {
+      return ['/images/default-house.jpg'];
+    }
+    return images.map(img => {
+      if (typeof img === 'string') {
+        // If it's already a URL path
+        if (img.startsWith('http') || img.startsWith('/')) {
+          return img.startsWith('http') ? img : `http://localhost:3001${img}`;
+        }
+        // If it's an image ID (24 character hex string)
+        if (/^[0-9a-fA-F]{24}$/.test(img)) {
+          return `http://localhost:3001/api/images/${img}`;
+        }
+      }
+      return '/images/default-house.jpg';
+    });
+  };
+
+  const imageUrls = processImagePaths(room.images || []);
+  const images = imageUrls.length > 0 ? imageUrls : ['/images/default-house.jpg'];
 
   const prevImage = (e) => {
     e.stopPropagation();
@@ -20,7 +40,18 @@ const HomeBlock = ({ room }) => {
   };
 
   const handleClick = () => {
-    navigate(`/room/${room._id}`); 
+    // Check if user is logged in
+    const currentUser = sessionStorage.getItem("currentUser");
+    
+    if (!currentUser) {
+      // User not logged in - redirect to login selection page
+      // Store the intended destination for redirect after login
+      sessionStorage.setItem("redirectAfterLogin", `/room/${room._id}`);
+      navigate("/loginweb");
+    } else {
+      // User is logged in - navigate to room details
+      navigate(`/room/${room._id}`);
+    }
   };
 
   return (
@@ -48,7 +79,7 @@ const HomeBlock = ({ room }) => {
         )}
         <div className="home-image-container">
         <img
-          src={`http://localhost:3001${images[currentImageIndex]}`}
+          src={images[currentImageIndex]}
           alt={room.title || 'Room image'}
           className="home-image"
           onError={(e) => {

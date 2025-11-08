@@ -525,6 +525,26 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+app.get('/api/user-counts', async (req, res) => {
+  try {
+    // Count travelers and hosts separately by filtering by accountType
+    const travelerCount = await Traveler.countDocuments({ accountType: 'traveller' });
+    const hostCount = await Host.countDocuments({ accountType: 'host' });
+    
+    res.json({
+      success: true,
+      travelerCount,
+      hostCount
+    });
+  } catch (error) {
+    console.error('Error fetching user counts:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching user counts'
+    });
+  }
+});
+
 // ==================== START SERVER ====================
 
 app.listen(PORT, () => {
