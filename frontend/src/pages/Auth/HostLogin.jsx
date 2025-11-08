@@ -103,19 +103,8 @@ const HostLogin = () => {
       
       localStorage.setItem('token', loginData.token);
       localStorage.setItem('user', JSON.stringify(loginData.user));
-      
-      // Also store in sessionStorage for consistency with profile page
-      sessionStorage.setItem('currentUser', JSON.stringify({
-        ...loginData.user,
-        email: loginData.user.email,
-        accountType: loginData.user.accountType,
-        name: loginData.user.name
-      }));
-      
-      // After login, navigate to profile page
-      // If there was a redirect path, it will be handled by profile page or user can navigate manually
-      sessionStorage.removeItem('redirectAfterLogin');
-      navigate('/profile');
+      sessionStorage.setItem('currentUser', JSON.stringify(loginData.user));
+      navigate('/host_index');
     } catch (err) {
       setError(err.message);
     } finally {
