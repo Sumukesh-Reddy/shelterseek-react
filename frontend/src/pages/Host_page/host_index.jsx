@@ -426,9 +426,7 @@ const HostIndex = () => {
         <div className="host-logo">
           <h2>ShelterSeek</h2>
         </div>
-        <div className="host-about">
-          <a href="/about">About</a>
-        </div>
+        
         <button className="host-traveler" onClick={toggleMenu}>
           <FontAwesomeIcon icon={faUser} />
         </button>

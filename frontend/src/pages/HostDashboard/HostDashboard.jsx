@@ -473,7 +473,7 @@ const HostDashboard = () => {
               <input
                 type="text"
                 placeholder="Search by title or location..."
-                className="search-bar"
+                className="host-search-bar"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
