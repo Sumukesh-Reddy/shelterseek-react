@@ -66,19 +66,11 @@
     background: transparent;
     color: #2d3748;
 }
-
-/* ---------------------------------------------------
-    GRID LIST
---------------------------------------------------- */
 .host-requests-list {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(clamp(18rem, 45vw, 22rem), 1fr));
     gap: clamp(1.25rem, 3vw, 2rem);
 }
-
-/* ---------------------------------------------------
-    CARD
---------------------------------------------------- */
 .host-request-card {
     background: #ffffff;
     border-radius: 0.75rem;
@@ -104,9 +96,6 @@
     margin-bottom: 1rem;
 }
 
-/* ---------------------------------------------------
-    CARD CONTENT ALIGNMENT (NEW)
---------------------------------------------------- */
 .card-header {
     display: flex;
     justify-content: space-between;
