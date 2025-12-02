@@ -1162,36 +1162,134 @@ app.get('/api/recent-activities', async (req, res) => {
   }
 });
 
-
 app.get('/api/revenue', async (req, res) => {
   try {
-    const bookings = await Booking.find().lean();
+    const bookings = await Booking.find({
+      paymentStatus: 'completed',
+      bookingStatus: { $in: ['confirmed', 'checked_in', 'completed'] }
+    }).lean();
 
-    // ✅ Ensure amounts are valid numbers
-    const validBookings = bookings.filter(b => !isNaN(Number(b.amount)));
+    console.log(`Found ${bookings.length} completed bookings for revenue calculation`);
 
-    const totalRevenue = validBookings.reduce((sum, b) => sum + Number(b.amount), 0);
+    // Debug: Log first booking to check structure
+    if (bookings.length > 0) {
+      console.log('Sample booking structure:', {
+        id: bookings[0]._id,
+        totalCost: bookings[0].totalCost,
+        amount: bookings[0].amount,
+        checkIn: bookings[0].checkIn,
+        paymentStatus: bookings[0].paymentStatus
+      });
+    }
+
+    // ✅ Use totalCost instead of amount (based on your booking schema)
+    const validBookings = bookings.filter(b => {
+      const cost = b.totalCost || b.amount;
+      return !isNaN(Number(cost)) && Number(cost) > 0;
+    });
+
+    console.log(`Valid bookings for revenue: ${validBookings.length}`);
+
+    const totalRevenue = validBookings.reduce((sum, b) => {
+      const cost = b.totalCost || b.amount || 0;
+      return sum + Number(cost);
+    }, 0);
 
     const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    
+    // Get the start of current month
+    const startOfMonth = new Date(currentYear, currentMonth, 1);
+    
+    // Get the start of current week (Monday)
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
+    startOfWeek.setHours(0, 0, 0, 0);
+
     const thisMonthRevenue = validBookings
       .filter(b => {
         const checkIn = new Date(b.checkIn);
-        return checkIn.getMonth() === now.getMonth() && checkIn.getFullYear() === now.getFullYear();
+        return checkIn >= startOfMonth && checkIn <= now;
       })
-      .reduce((sum, b) => sum + Number(b.amount), 0);
+      .reduce((sum, b) => {
+        const cost = b.totalCost || b.amount || 0;
+        return sum + Number(cost);
+      }, 0);
 
     const thisWeekRevenue = validBookings
       .filter(b => {
         const checkIn = new Date(b.checkIn);
-        const diffDays = (now - checkIn) / (1000 * 60 * 60 * 24);
-        return diffDays >= 0 && diffDays <= 7;
+        return checkIn >= startOfWeek && checkIn <= now;
       })
-      .reduce((sum, b) => sum + Number(b.amount), 0);
+      .reduce((sum, b) => {
+        const cost = b.totalCost || b.amount || 0;
+        return sum + Number(cost);
+      }, 0);
 
-    res.json({ totalRevenue, thisMonthRevenue, thisWeekRevenue });
+    // Calculate daily revenue for last 7 days
+    const dailyRevenue = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const dayRevenue = validBookings
+        .filter(b => {
+          const checkIn = new Date(b.checkIn);
+          checkIn.setHours(0, 0, 0, 0);
+          return checkIn.getTime() === date.getTime();
+        })
+        .reduce((sum, b) => {
+          const cost = b.totalCost || b.amount || 0;
+          return sum + Number(cost);
+        }, 0);
+      
+      dailyRevenue[dateStr] = dayRevenue;
+    }
+
+    // Calculate monthly revenue for last 6 months
+    const monthlyRevenue = {};
+    for (let i = 5; i >= 0; i--) {
+      const monthDate = new Date(currentYear, currentMonth - i, 1);
+      const monthKey = monthDate.toLocaleString('default', { month: 'short', year: '2-digit' });
+      
+      const monthStart = new Date(currentYear, currentMonth - i, 1);
+      const monthEnd = new Date(currentYear, currentMonth - i + 1, 0);
+      
+      const monthRev = validBookings
+        .filter(b => {
+          const checkIn = new Date(b.checkIn);
+          return checkIn >= monthStart && checkIn <= monthEnd;
+        })
+        .reduce((sum, b) => {
+          const cost = b.totalCost || b.amount || 0;
+          return sum + Number(cost);
+        }, 0);
+      
+      monthlyRevenue[monthKey] = monthRev;
+    }
+
+    res.json({ 
+      success: true,
+      totalRevenue, 
+      thisMonthRevenue, 
+      thisWeekRevenue,
+      dailyRevenue,
+      monthlyRevenue,
+      currency: 'INR',
+      bookingCount: validBookings.length,
+      averageBookingValue: validBookings.length > 0 ? totalRevenue / validBookings.length : 0
+    });
   } catch (err) {
     console.error('Error in /api/revenue:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
   }
 });
 
@@ -1234,6 +1332,46 @@ app.get('/api/bookings/summary', async (req, res) => {
   }
 });
 //j
+app.get('/api/bookings/summarys', async (req, res) => {
+  try {
+    const bookings = await Booking.find({}).lean();
+
+    const summary = bookings.map((b) => {
+      // ✅ totalCost is your actual field
+      const cost = Number(b.totalCost ?? 0);
+
+      return {
+        // both ids so you can use whichever you want on frontend
+        _id: b._id,
+        bookingId: b.bookingId || b._id,          // human-readable bookingId
+        userName: b.travelerName || 'Unknown',   // guest name
+        userEmail: b.travelerEmail || '',        // optional
+        roomTitle: b.roomTitle || 'N/A',
+
+        checkIn: b.checkIn || null,
+        checkOut: b.checkOut || null,
+
+        // 👇 main one
+        totalCost: cost,
+
+        // 👇 extra alias so old frontend using `booking.amount` still works
+        amount: cost,
+      };
+    });
+
+    res.json({
+      success: true,
+      totalBookings: summary.length,
+      bookings: summary,
+    });
+  } catch (err) {
+    console.error('Error in /api/bookings/summary:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+});
 
 
 

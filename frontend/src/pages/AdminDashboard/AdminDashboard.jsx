@@ -38,6 +38,22 @@ function AdminDashboard() {
       })
       .catch(() => setBookings([]));
 
+     fetch('http://localhost:3001/api/bookings/summarys')
+    .then(res => res.json())
+    .then(response => {
+      console.log('Booking summary response:', response); // Debug log
+      if (response.success && Array.isArray(response.bookings)) {
+        setBookings(response.bookings);
+      } else {
+        console.error('Invalid booking summary response:', response);
+        setBookings([]);
+      }
+    })
+    .catch(err => {
+      console.error('Error fetching booking summary:', err);
+      setBookings([]);
+    });
+
     fetch('http://localhost:3001/api/new-customers')
       .then(res => res.json())
       .then(result => {
@@ -463,50 +479,96 @@ function AdminDashboard() {
         </div>
 
         {/* Booking Management */}
-        <section style={styles.bookingSection}>
-          <h3 style={styles.bookingTitle}>Booking Management</h3>
+        {/* Booking Management */}
+<section style={styles.bookingSection}>
+  <h3 style={styles.bookingTitle}>Booking Management</h3>
 
-          <div>
-            <input
-              type="text"
-              placeholder="Search by guest name or booking ID"
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={styles.searchInput}
-              value={searchTerm}
-            />
-          </div>
+  <div>
+    <input
+      type="text"
+      placeholder="Search by guest name, booking ID, or email"
+      onChange={(e) => setSearchTerm(e.target.value)}
+      style={styles.searchInput}
+      value={searchTerm}
+    />
+  </div>
 
-          <div style={styles.tableWrap}>
-            {filteredBookings.length > 0 ? (
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Booking ID</th>
-                    <th style={styles.th}>Guest Name</th>
-                    <th style={styles.th}>Check-In</th>
-                    <th style={styles.th}>Check-Out</th>
-                    <th style={styles.th}>Amount</th>
-                    <th style={styles.th}>User Email</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredBookings.map((booking, i) => (
-                    <tr key={i}>
-                      <td style={styles.td}>{booking._id}</td>
-                      <td style={styles.td}>{booking.userName}</td>
-                      <td style={styles.td}>{booking.checkIn ? new Date(booking.checkIn).toLocaleDateString() : '-'}</td>
-                      <td style={styles.td}>{booking.checkOut ? new Date(booking.checkOut).toLocaleDateString() : '-'}</td>
-                      <td style={styles.td}>₹{booking.amount}</td>
-                      <td style={styles.td}>{booking.userEmail}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div style={styles.noData}>{searchTerm ? 'No bookings matching your search.' : 'No bookings available.'}</div>
-            )}
-          </div>
-        </section>
+  <div style={styles.tableWrap}>
+    {filteredBookings.length > 0 ? (
+      <table style={styles.table}>
+        <thead>
+          <tr>
+            <th style={styles.th}>#</th>
+            <th style={styles.th}>Booking ID</th>
+            <th style={styles.th}>Guest Name</th>
+            <th style={styles.th}>Room</th>
+            <th style={styles.th}>Check-In</th>
+            <th style={styles.th}>Check-Out</th>
+            <th style={styles.th}>Total Cost</th>
+            <th style={styles.th}>Guest Email</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredBookings.map((booking, i) => (
+            <tr key={booking._id || i}>
+              <td style={styles.td}>{i + 1}</td>
+              <td style={styles.td}>
+                {booking.bookingId || booking._id?.toString().substring(0, 8)}
+              </td>
+              <td style={styles.td}>
+                <div style={{ fontWeight: 600 }}>{booking.userName}</div>
+              </td>
+              <td style={styles.td}>
+                {booking.roomTitle ? (
+                  <div>
+                    <div style={{ fontWeight: 500 }}>{booking.roomTitle}</div>
+                    {booking.roomId && (
+                      <div style={{ fontSize: '12px', color: '#666' }}>
+                        ID: {booking.roomId.toString().substring(0, 8)}...
+                      </div>
+                    )}
+                  </div>
+                ) : 'N/A'}
+              </td>
+              <td style={styles.td}>
+                {booking.checkIn ? (
+                  <div>
+                    {new Date(booking.checkIn).toLocaleDateString()}
+                    <div style={{ fontSize: '12px', color: '#666' }}>
+                      {new Date(booking.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                ) : '-'}
+              </td>
+              <td style={styles.td}>
+                {booking.checkOut ? (
+                  <div>
+                    {new Date(booking.checkOut).toLocaleDateString()}
+                    <div style={{ fontSize: '12px', color: '#666' }}>
+                      {new Date(booking.checkOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                ) : '-'}
+              </td>
+              <td style={styles.td}>
+                <div style={{ fontWeight: 700, color: '#0e6b60' }}>
+                  ₹{booking.totalCost?.toLocaleString('en-IN') || booking.amount?.toLocaleString('en-IN') || '0'}
+                </div>
+              </td>
+              <td style={styles.td}>
+                {booking.userEmail || 'N/A'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    ) : (
+      <div style={styles.noData}>
+        {searchTerm ? 'No bookings matching your search.' : 'Loading bookings...'}
+      </div>
+    )}
+  </div>
+</section>
       </div>
     </div>
   );
