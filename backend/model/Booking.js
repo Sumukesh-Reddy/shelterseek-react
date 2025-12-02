@@ -170,7 +170,6 @@ const bookingSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index for efficient queries
 bookingSchema.index({ travelerId: 1, bookedAt: -1 });
 bookingSchema.index({ hostId: 1, bookedAt: -1 });
 bookingSchema.index({ roomId: 1, checkIn: 1, checkOut: 1 });
@@ -178,4 +177,8 @@ bookingSchema.index({ paymentStatus: 1 });
 bookingSchema.index({ bookingStatus: 1 });
 bookingSchema.index({ 'paymentDetails.transactionId': 1 });
 
-module.exports = mongoose.model('Booking', bookingSchema);
+const Booking =
+  mongoose.models.Booking || mongoose.model('Booking', bookingSchema);
+
+module.exports = Booking;
+module.exports.schema = bookingSchema;
