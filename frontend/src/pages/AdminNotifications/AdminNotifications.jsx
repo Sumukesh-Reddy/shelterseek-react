@@ -575,7 +575,7 @@ function AdminNotifications() {
                                 if (activeTab === 'host') {
                                   navigate(`/host/${encodeURIComponent(user.email)}`);
                                 } else {
-                                  navigate(`/traveler/${encodeURIComponent(user.email)}`);
+                                  navigate(`/traveler/${encodeURIComponent(user.email)}/bookings`);
                                 }
                               }}
                             >

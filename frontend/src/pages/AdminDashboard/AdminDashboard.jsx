@@ -1,9 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AdminNavbar from '../../components/AdminNavbar/navbar';
 
-// Reference to uploaded screenshot (local path)
-const screenshotPreview = "/mnt/data/c56974f5-ce0d-4736-9c97-c5522b9dc752.png";
-
 function AdminDashboard() {
   // data state
   const [totalBookings, setTotalBookings] = useState(0);
@@ -17,43 +14,102 @@ function AdminDashboard() {
   const [bookings, setBookings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // ✅ Room counts state extended with shared/full
+  const [roomCounts, setRoomCounts] = useState({
+    total: 0,
+    available: 0,
+    booked: 0,
+    thisMonthBooked: 0,
+    thisWeekBooked: 0,
+    sharedRooms: 0,
+    fullRooms: 0
+  });
+  const [loadingRooms, setLoadingRooms] = useState(true);
+
   // responsive helper
   const [isMobile, setIsMobile] = useState(
     typeof window !== 'undefined' ? window.innerWidth <= 900 : false
   );
+
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 900);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // fetch data (unchanged)
+  // fetch data
   useEffect(() => {
-    fetch('http://localhost:3001/api/bookings')
+    // Fetch booking summary (list)
+    fetch('http://localhost:3001/api/bookings/summarys')
       .then(res => res.json())
       .then(response => {
-        if (Array.isArray(response)) setBookings(response);
-        else if (Array.isArray(response.data)) setBookings(response.data);
-        else setBookings([]);
+        console.log('Booking summary response:', response);
+        if (response.success && Array.isArray(response.bookings)) {
+          setBookings(response.bookings);
+        } else {
+          console.error('Invalid booking summary response:', response);
+          setBookings([]);
+        }
       })
-      .catch(() => setBookings([]));
-
-     fetch('http://localhost:3001/api/bookings/summarys')
-    .then(res => res.json())
-    .then(response => {
-      console.log('Booking summary response:', response); // Debug log
-      if (response.success && Array.isArray(response.bookings)) {
-        setBookings(response.bookings);
-      } else {
-        console.error('Invalid booking summary response:', response);
+      .catch(err => {
+        console.error('Error fetching booking summary:', err);
         setBookings([]);
-      }
-    })
-    .catch(err => {
-      console.error('Error fetching booking summary:', err);
-      setBookings([]);
-    });
+      });
 
+    // ✅ Fetch room counts + shared/full from popularTypes
+    fetch('http://localhost:3001/api/rooms/count')
+      .then(res => res.json())
+      .then(data => {
+        console.log('Room counts response:', data);
+        if (data.success) {
+          const counts = data.counts || {};
+          let shared = 0;
+          let full = 0;
+
+          if (Array.isArray(data.popularTypes)) {
+            data.popularTypes.forEach(t => {
+              if (t._id === 'Shared') shared = t.count || 0;
+              if (t._id === 'Full') full = t.count || 0;
+            });
+          }
+
+          setRoomCounts({
+            total: counts.total || 0,
+            available: counts.available || 0,
+            booked: counts.booked || 0,
+            thisMonthBooked: counts.thisMonthBooked || 0,
+            thisWeekBooked: counts.thisWeekBooked || 0,
+            sharedRooms: shared,
+            fullRooms: full
+          });
+        } else {
+          console.error('Failed to fetch room counts:', data.message);
+          setRoomCounts({
+            total: 0,
+            available: 0,
+            booked: 0,
+            thisMonthBooked: 0,
+            thisWeekBooked: 0,
+            sharedRooms: 0,
+            fullRooms: 0
+          });
+        }
+      })
+      .catch(err => {
+        console.error('Error fetching room counts:', err);
+        setRoomCounts({
+          total: 0,
+          available: 0,
+          booked: 0,
+          thisMonthBooked: 0,
+          thisWeekBooked: 0,
+          sharedRooms: 0,
+          fullRooms: 0
+        });
+      })
+      .finally(() => setLoadingRooms(false));
+
+    // Fetch new customers
     fetch('http://localhost:3001/api/new-customers')
       .then(res => res.json())
       .then(result => {
@@ -63,6 +119,7 @@ function AdminDashboard() {
       })
       .catch(() => setNewCustomers([]));
 
+    // Fetch recent activities
     fetch('http://localhost:3001/api/recent-activities')
       .then(res => res.json())
       .then(result => {
@@ -72,6 +129,7 @@ function AdminDashboard() {
       })
       .catch(() => setRecentActivities([]));
 
+    // Fetch revenue
     fetch('http://localhost:3001/api/revenue')
       .then(res => res.json())
       .then(data => {
@@ -83,6 +141,7 @@ function AdminDashboard() {
       })
       .catch(() => {});
 
+    // Fetch booking counts (numbers)
     fetch('http://localhost:3001/api/bookings/summary')
       .then(res => res.json())
       .then(data => {
@@ -97,12 +156,12 @@ function AdminDashboard() {
 
   const filteredBookings = bookings.filter(b =>
     (b.userName ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (b._id ?? '').toString().includes(searchTerm)
+    (b._id ?? '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (b.bookingId ?? '').toString().toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // ---------- New stylish palette + inline styles ----------
-  // Palette: deep navy text, soft glass cards, teal->purple gradient accent
-  const accentGradient = 'linear-gradient(90deg,#15b7a6,#7a3ff5)'; // teal -> purple
+  // ---------- Stylish inline CSS ----------
+  const accentGradient = 'linear-gradient(90deg,#15b7a6,#7a3ff5)';
   const subtleGlass = 'linear-gradient(180deg, rgba(255,255,255,0.66), rgba(255,255,255,0.5))';
 
   const styles = {
@@ -115,15 +174,12 @@ function AdminDashboard() {
       fontFamily: '"Inter","Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Arial',
       color: '#06223a'
     },
-
-    // full-width wrapper trick (edge-to-edge)
     fullWidthWrapper: {
       width: '100vw',
       marginLeft: 'calc(50% - 50vw)',
       marginRight: 'calc(50% - 50vw)',
       boxSizing: 'border-box'
     },
-
     titleRow: {
       display: 'flex',
       alignItems: 'center',
@@ -145,7 +201,6 @@ function AdminDashboard() {
       display: 'inline-block',
       boxShadow: '0 6px 18px rgba(122,63,245,0.12)'
     },
-
     overviewRow: {
       display: 'flex',
       gap: isMobile ? 18 : 36,
@@ -155,7 +210,6 @@ function AdminDashboard() {
       padding: isMobile ? '0 18px' : '0 48px',
       boxSizing: 'border-box'
     },
-
     overviewCard: {
       background: subtleGlass,
       backdropFilter: 'saturate(140%) blur(6px)',
@@ -174,8 +228,6 @@ function AdminDashboard() {
       boxSizing: 'border-box',
       color: '#072032'
     },
-
-    // decorative corner glow using gradient (top left to top right but softer)
     accentStripeTop: {
       position: 'absolute',
       top: 8,
@@ -187,7 +239,6 @@ function AdminDashboard() {
       opacity: 0.95,
       boxShadow: '0 8px 30px rgba(122,63,245,0.14)'
     },
-
     cardTitle: {
       fontSize: isMobile ? 14 : 16,
       letterSpacing: 3,
@@ -197,25 +248,21 @@ function AdminDashboard() {
       marginBottom: isMobile ? 14 : 20,
       textAlign: 'center'
     },
-
     mainNumber: {
       fontSize: isMobile ? 48 : 88,
       fontWeight: 900,
-      color: '#0e6b60', // deep teal
+      color: '#0e6b60',
       margin: '6px 0',
       textAlign: 'center',
       lineHeight: 1
     },
-
     metaLine: {
-      fontSize: isMobile ? 18 : 26,
+      fontSize: isMobile ? 18 : 22,
       fontWeight: 800,
       color: '#104f46',
-      marginTop: isMobile ? 10 : 16,
+      marginTop: isMobile ? 8 : 10,
       textAlign: 'center'
     },
-
-    // subtle decorative shadow behind number for depth
     numberShadow: {
       position: 'absolute',
       width: isMobile ? 120 : 220,
@@ -224,13 +271,10 @@ function AdminDashboard() {
       background: 'radial-gradient(circle at center, rgba(26,197,173,0.06), transparent 40%)',
       zIndex: 0
     },
-
-    // below overview container
     belowContainer: {
       padding: isMobile ? '28px 18px' : '36px 48px',
       boxSizing: 'border-box'
     },
-
     customerActivityRow: {
       display: 'flex',
       gap: 28,
@@ -238,7 +282,6 @@ function AdminDashboard() {
       alignItems: 'stretch',
       marginBottom: 28
     },
-
     sideCard: {
       background: subtleGlass,
       backdropFilter: 'saturate(130%) blur(4px)',
@@ -251,7 +294,6 @@ function AdminDashboard() {
       boxSizing: 'border-box',
       overflow: 'hidden'
     },
-
     sideCardHeader: {
       display: 'flex',
       alignItems: 'center',
@@ -270,7 +312,6 @@ function AdminDashboard() {
       borderRadius: 3,
       background: accentGradient
     },
-
     itemList: { listStyle: 'none', padding: 0, marginTop: 8 },
     itemRow: {
       display: 'flex',
@@ -298,7 +339,6 @@ function AdminDashboard() {
       color: '#061426'
     },
     itemEmail: { fontSize: isMobile ? 13 : 14, color: '#5b6b7a' },
-
     revenueRow: {
       display: 'flex',
       gap: 20,
@@ -317,7 +357,6 @@ function AdminDashboard() {
     },
     revenueLabel: { fontSize: 15, fontWeight: 800, color: '#061426', margin: 0 },
     revenueValue: { fontSize: isMobile ? 20 : 24, fontWeight: 900, marginTop: 8, color: '#0e6b60' },
-
     bookingSection: {
       background: subtleGlass,
       borderRadius: 16,
@@ -327,7 +366,6 @@ function AdminDashboard() {
       boxSizing: 'border-box'
     },
     bookingTitle: { fontSize: isMobile ? 20 : 22, fontWeight: 900, margin: 0, marginBottom: 16 },
-
     searchInput: {
       width: '100%',
       padding: isMobile ? '12px 14px' : '14px 16px',
@@ -338,7 +376,6 @@ function AdminDashboard() {
       boxSizing: 'border-box',
       background: 'rgba(255,255,255,0.8)'
     },
-
     tableWrap: { overflowX: 'auto', borderRadius: 8 },
     table: { width: '100%', borderCollapse: 'collapse', minWidth: 860 },
     th: {
@@ -357,7 +394,12 @@ function AdminDashboard() {
       fontSize: isMobile ? 13 : 14,
       color: '#0b1e28'
     },
-    noData: { textAlign: 'center', padding: 28, color: '#5b6b7a', fontSize: 16 }
+    noData: {
+      textAlign: 'center',
+      padding: 28,
+      color: '#5b6b7a',
+      fontSize: 16
+    }
   };
 
   return (
@@ -376,9 +418,9 @@ function AdminDashboard() {
 
         {/* Overview cards */}
         <div style={styles.overviewRow}>
+          {/* Bookings card */}
           <div style={styles.overviewCard}>
             <div style={styles.accentStripeTop} />
-            {/* decorative soft glow behind number */}
             <div style={styles.numberShadow} />
 
             <div style={styles.cardTitle}>TOTAL BOOKING</div>
@@ -387,14 +429,32 @@ function AdminDashboard() {
             <div style={styles.metaLine}>This Week: {thisWeekBookings ?? 0}</div>
           </div>
 
+          {/* Rooms card with Shared / Full */}
           <div style={styles.overviewCard}>
             <div style={styles.accentStripeTop} />
             <div style={styles.numberShadow} />
 
-            <div style={styles.cardTitle}>ROOMS AVAILABLE</div>
-            <div style={styles.mainNumber}>312</div>
-            <div style={styles.metaLine}>Booked (M): 913</div>
-            <div style={styles.metaLine}>Booked (W): 125</div>
+            <div style={styles.cardTitle}>ROOMS OVERVIEW</div>
+            {loadingRooms ? (
+              <>
+                <div style={styles.mainNumber}>...</div>
+                <div style={styles.metaLine}>Loading...</div>
+                <div style={styles.metaLine}>Please wait</div>
+              </>
+            ) : (
+              <>
+                <div style={styles.mainNumber}>{roomCounts.available}</div>
+                <div style={styles.metaLine}>
+                  Total: {roomCounts.total} | Booked: {roomCounts.booked}
+                </div>
+                <div style={styles.metaLine}>
+                  Shared Rooms: {roomCounts.sharedRooms}
+                </div>
+                <div style={styles.metaLine}>
+                  Full Rooms: {roomCounts.fullRooms}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -410,18 +470,22 @@ function AdminDashboard() {
             </div>
 
             <ul style={styles.itemList}>
-              {newCustomers.length > 0 ? newCustomers.map((c, i) => (
-                <li key={i} style={styles.itemRow}>
-                  <div style={styles.avatar}>
-                    {c.initials ?? (c.name ? c.name.charAt(0).toUpperCase() : '?')}
-                  </div>
-                  <div>
-                    <div style={styles.itemName}>{c.name || 'N/A'}</div>
-                    <div style={styles.itemEmail}>{c.email || '—'}</div>
-                  </div>
-                </li>
-              )) : (
-                <div style={{ padding: 12, color: '#5b6b7a', fontSize: 16 }}>No new customers</div>
+              {newCustomers.length > 0 ? (
+                newCustomers.map((c, i) => (
+                  <li key={i} style={styles.itemRow}>
+                    <div style={styles.avatar}>
+                      {c.initials ?? (c.name ? c.name.charAt(0).toUpperCase() : '?')}
+                    </div>
+                    <div>
+                      <div style={styles.itemName}>{c.name || 'N/A'}</div>
+                      <div style={styles.itemEmail}>{c.email || '—'}</div>
+                    </div>
+                  </li>
+                ))
+              ) : (
+                <div style={{ padding: 12, color: '#5b6b7a', fontSize: 16 }}>
+                  No new customers
+                </div>
               )}
             </ul>
           </div>
@@ -433,22 +497,32 @@ function AdminDashboard() {
             </div>
 
             <ul style={styles.itemList}>
-              {recentActivities.length > 0 ? recentActivities.map((act, i) => (
-                <li key={i} style={styles.itemRow}>
-                  <div style={styles.avatar}>
-                    {act.initials ?? (act.name ? act.name.charAt(0).toUpperCase() : 'A')}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: isMobile ? 14 : 15, color: '#061426' }}>
-                      <strong style={{ fontWeight: 800 }}>{act.name}</strong> {act.action}
+              {recentActivities.length > 0 ? (
+                recentActivities.map((act, i) => (
+                  <li key={i} style={styles.itemRow}>
+                    <div style={styles.avatar}>
+                      {act.initials ?? (act.name ? act.name.charAt(0).toUpperCase() : 'A')}
                     </div>
-                    <div style={{ fontSize: 13, color: '#5b6b7a', marginTop: 6 }}>
-                      {act.updatedAt ? new Date(act.updatedAt).toLocaleString() : ''}
+                    <div>
+                      <div style={{ fontSize: isMobile ? 14 : 15, color: '#061426' }}>
+                        <strong style={{ fontWeight: 800 }}>{act.name}</strong> {act.action}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: '#5b6b7a',
+                          marginTop: 6
+                        }}
+                      >
+                        {act.updatedAt ? new Date(act.updatedAt).toLocaleString() : ''}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              )) : (
-                <div style={{ padding: 12, color: '#5b6b7a', fontSize: 16 }}>No recent activities</div>
+                  </li>
+                ))
+              ) : (
+                <div style={{ padding: 12, color: '#5b6b7a', fontSize: 16 }}>
+                  No recent activities
+                </div>
               )}
             </ul>
           </div>
@@ -456,119 +530,146 @@ function AdminDashboard() {
 
         {/* Revenue */}
         <div style={{ marginBottom: 22 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <h3 style={{ margin: 0, fontSize: isMobile ? 18 : 22, fontWeight: 900 }}>Revenue Overview</h3>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 12
+            }}
+          >
+            <h3
+              style={{
+                margin: 0,
+                fontSize: isMobile ? 18 : 22,
+                fontWeight: 900
+              }}
+            >
+              Revenue Overview
+            </h3>
           </div>
 
           <div style={styles.revenueRow}>
             <div style={styles.revenueCard}>
               <p style={styles.revenueLabel}>Total Revenue</p>
-              <p style={styles.revenueValue}>₹{totalRevenue}</p>
+              <p style={styles.revenueValue}>₹{totalRevenue.toLocaleString('en-IN')}</p>
             </div>
 
             <div style={styles.revenueCard}>
               <p style={styles.revenueLabel}>This Month</p>
-              <p style={styles.revenueValue}>₹{thisMonthRevenue}</p>
+              <p style={styles.revenueValue}>₹{thisMonthRevenue.toLocaleString('en-IN')}</p>
             </div>
 
             <div style={styles.revenueCard}>
               <p style={styles.revenueLabel}>This Week</p>
-              <p style={styles.revenueValue}>₹{thisWeekRevenue}</p>
+              <p style={styles.revenueValue}>₹{thisWeekRevenue.toLocaleString('en-IN')}</p>
             </div>
           </div>
         </div>
 
         {/* Booking Management */}
-        {/* Booking Management */}
-<section style={styles.bookingSection}>
-  <h3 style={styles.bookingTitle}>Booking Management</h3>
+        <section style={styles.bookingSection}>
+          <h3 style={styles.bookingTitle}>Booking Management</h3>
 
-  <div>
-    <input
-      type="text"
-      placeholder="Search by guest name, booking ID, or email"
-      onChange={(e) => setSearchTerm(e.target.value)}
-      style={styles.searchInput}
-      value={searchTerm}
-    />
-  </div>
+          <div>
+            <input
+              type="text"
+              placeholder="Search by guest name, booking ID, or email"
+              onChange={e => setSearchTerm(e.target.value)}
+              style={styles.searchInput}
+              value={searchTerm}
+            />
+          </div>
 
-  <div style={styles.tableWrap}>
-    {filteredBookings.length > 0 ? (
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.th}>#</th>
-            <th style={styles.th}>Booking ID</th>
-            <th style={styles.th}>Guest Name</th>
-            <th style={styles.th}>Room</th>
-            <th style={styles.th}>Check-In</th>
-            <th style={styles.th}>Check-Out</th>
-            <th style={styles.th}>Total Cost</th>
-            <th style={styles.th}>Guest Email</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredBookings.map((booking, i) => (
-            <tr key={booking._id || i}>
-              <td style={styles.td}>{i + 1}</td>
-              <td style={styles.td}>
-                {booking.bookingId || booking._id?.toString().substring(0, 8)}
-              </td>
-              <td style={styles.td}>
-                <div style={{ fontWeight: 600 }}>{booking.userName}</div>
-              </td>
-              <td style={styles.td}>
-                {booking.roomTitle ? (
-                  <div>
-                    <div style={{ fontWeight: 500 }}>{booking.roomTitle}</div>
-                    {booking.roomId && (
-                      <div style={{ fontSize: '12px', color: '#666' }}>
-                        ID: {booking.roomId.toString().substring(0, 8)}...
-                      </div>
-                    )}
-                  </div>
-                ) : 'N/A'}
-              </td>
-              <td style={styles.td}>
-                {booking.checkIn ? (
-                  <div>
-                    {new Date(booking.checkIn).toLocaleDateString()}
-                    <div style={{ fontSize: '12px', color: '#666' }}>
-                      {new Date(booking.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  </div>
-                ) : '-'}
-              </td>
-              <td style={styles.td}>
-                {booking.checkOut ? (
-                  <div>
-                    {new Date(booking.checkOut).toLocaleDateString()}
-                    <div style={{ fontSize: '12px', color: '#666' }}>
-                      {new Date(booking.checkOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  </div>
-                ) : '-'}
-              </td>
-              <td style={styles.td}>
-                <div style={{ fontWeight: 700, color: '#0e6b60' }}>
-                  ₹{booking.totalCost?.toLocaleString('en-IN') || booking.amount?.toLocaleString('en-IN') || '0'}
-                </div>
-              </td>
-              <td style={styles.td}>
-                {booking.userEmail || 'N/A'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    ) : (
-      <div style={styles.noData}>
-        {searchTerm ? 'No bookings matching your search.' : 'Loading bookings...'}
-      </div>
-    )}
-  </div>
-</section>
+          <div style={styles.tableWrap}>
+            {filteredBookings.length > 0 ? (
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>#</th>
+                    <th style={styles.th}>Booking ID</th>
+                    <th style={styles.th}>Guest Name</th>
+                    <th style={styles.th}>Room</th>
+                    <th style={styles.th}>Check-In</th>
+                    <th style={styles.th}>Check-Out</th>
+                    <th style={styles.th}>Total Cost</th>
+                    <th style={styles.th}>Guest Email</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredBookings.map((booking, i) => (
+                    <tr key={booking._id || i}>
+                      <td style={styles.td}>{i + 1}</td>
+                      <td style={styles.td}>
+                        {booking.bookingId || booking._id?.toString().substring(0, 8)}
+                      </td>
+                      <td style={styles.td}>
+                        <div style={{ fontWeight: 600 }}>{booking.userName}</div>
+                      </td>
+                      <td style={styles.td}>
+                        {booking.roomTitle ? (
+                          <div>
+                            <div style={{ fontWeight: 500 }}>{booking.roomTitle}</div>
+                            {booking.roomId && (
+                              <div style={{ fontSize: '12px', color: '#666' }}>
+                                ID: {booking.roomId.toString().substring(0, 8)}...
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          'N/A'
+                        )}
+                      </td>
+                      <td style={styles.td}>
+                        {booking.checkIn ? (
+                          <div>
+                            {new Date(booking.checkIn).toLocaleDateString()}
+                            <div style={{ fontSize: '12px', color: '#666' }}>
+                              {new Date(booking.checkIn).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td style={styles.td}>
+                        {booking.checkOut ? (
+                          <div>
+                            {new Date(booking.checkOut).toLocaleDateString()}
+                            <div style={{ fontSize: '12px', color: '#666' }}>
+                              {new Date(booking.checkOut).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td style={styles.td}>
+                        <div style={{ fontWeight: 700, color: '#0e6b60' }}>
+                          ₹
+                          {booking.totalCost?.toLocaleString('en-IN') ||
+                            booking.amount?.toLocaleString('en-IN') ||
+                            '0'}
+                        </div>
+                      </td>
+                      <td style={styles.td}>{booking.userEmail || 'N/A'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div style={styles.noData}>
+                {searchTerm ? 'No bookings matching your search.' : 'Loading bookings...'}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );
