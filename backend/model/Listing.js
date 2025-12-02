@@ -45,9 +45,7 @@ const listingSchema = new mongoose.Schema(
     reviews: [{
       type: String
     }],
-    availability: [{
-      type: Date
-    }],
+    unavailableDates: [Date],
     createdAt: { type: Date, default: Date.now },
   },
   { 

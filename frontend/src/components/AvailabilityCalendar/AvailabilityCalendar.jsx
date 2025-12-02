@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import './AvailabilityCalendar.css';
+import './unavailableDatesCalendar.css';
 
-const AvailabilityCalendar = ({ selectedDates = [], onDatesChange, minDate, maxDate }) => {
+const unavailableDatesCalendar = ({ selectedDates = [], onDatesChange, minDate, maxDate }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [hoveredDate, setHoveredDate] = useState(null);
 
@@ -114,7 +114,7 @@ const AvailabilityCalendar = ({ selectedDates = [], onDatesChange, minDate, maxD
   const calendarDays = generateCalendarDays();
 
   return (
-    <div className="availability-calendar">
+    <div className="unavailableDates-calendar">
       <div className="calendar-header">
         <button 
           type="button"
@@ -204,5 +204,5 @@ const AvailabilityCalendar = ({ selectedDates = [], onDatesChange, minDate, maxD
   );
 };
 
-export default AvailabilityCalendar;
+export default unavailableDatesCalendar;
 

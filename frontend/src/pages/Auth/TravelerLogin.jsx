@@ -127,10 +127,8 @@ const TravelerLogin = () => {
         localStorage.setItem('viewedHomes', JSON.stringify([]));
       }
       
-      // After login, navigate to profile page
-      // If there was a redirect path, it will be handled by profile page or user can navigate manually
       sessionStorage.removeItem('redirectAfterLogin');
-      navigate('/profile');
+      navigate('/');
     } catch (err) {
       setError(err.message);
     } finally {

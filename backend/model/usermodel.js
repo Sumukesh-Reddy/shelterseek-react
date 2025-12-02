@@ -23,7 +23,6 @@ const baseUserFields = {
   googleId: {
     type: String,
     default: null
-    // ✅ REMOVED: sparse: true from here
   },
   otp: {
     type: String,
@@ -60,6 +59,86 @@ const baseUserFields = {
   }
 };
 
+// usermodel.js - UPDATED booking schema
+const bookingSchema = new mongoose.Schema({
+  bookingId: {
+    type: String,
+    required: true
+  },
+  roomId: {
+    type: String,
+    required: true
+  },
+  roomTitle: {
+    type: String,
+    required: true
+  },
+  hostId: {
+    type: String,
+    required: true
+  },
+  hostEmail: {
+    type: String,
+    required: true
+  },
+  checkIn: {
+    type: Date,
+    required: true
+  },
+  checkOut: {
+    type: Date,
+    required: true
+  },
+  days: {
+    type: Number,
+    required: true
+  },
+  totalCost: {
+    type: Number,
+    required: true
+  },
+  status: {
+    type: String,
+    enum: ['confirmed', 'pending', 'cancelled', 'completed', 'checked_in', 'checked_out'],
+    default: 'confirmed'
+  },
+  bookedAt: {
+    type: Date,
+    default: Date.now
+  },
+  guests: {
+    type: Number,
+    default: 1
+  },
+  guestDetails: [{
+    guestName: String,
+    guestAge: Number,
+    guestGender: String,
+    guestContact: String,
+    govtIdType: String,
+    govtIdNumber: String
+  }],
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'completed', 'failed', 'refunded', 'partially_refunded'],
+    default: 'completed'
+  },
+  paymentMethod: {
+    type: String,
+    enum: ['credit_card', 'debit_card', 'upi', 'net_banking', 'wallet'],
+    default: 'credit_card'
+  },
+  specialRequests: {
+    type: String,
+    default: ''
+  },
+  transactionId: {
+    type: String
+  }
+}, { 
+  _id: false,
+  timestamps: false
+});
 // Traveler Login Schema
 const travelerLoginSchema = new mongoose.Schema(
   {
@@ -80,7 +159,8 @@ const travelerLoginSchema = new mongoose.Schema(
         }
       }],
       default: []
-    }
+    },
+    bookings: [bookingSchema] // Add bookings array for travelers
   },
   { 
     collection: 'LoginData'
@@ -94,7 +174,8 @@ const hostLoginSchema = new mongoose.Schema(
     propertyDetails: {
       type: Object,
       default: {}
-    }
+    },
+    hostBookings: [bookingSchema] // Add bookings array for hosts
   },
   { 
     collection: 'LoginData'

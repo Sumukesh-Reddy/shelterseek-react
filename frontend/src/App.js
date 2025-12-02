@@ -20,6 +20,8 @@ import Payment from './pages/Payment/Payment';
 import HostIndex from './pages/Host_page/host_index';
 import HostDashboard from './pages/HostDashboard/HostDashboard';
 import HostProfile from './pages/HostProfile/HostProfile';
+import History from './pages/History/History';
+import BookedHistory from './pages/BookedRooms/BookedHistory';
 
 function App() {
   return (
@@ -45,6 +47,8 @@ function App() {
         <Route path="/host_index" element={<HostIndex />} />
         <Route path="/dashboard" element={<HostDashboard />} />
         <Route path="/hostProfile" element={<HostProfile />} />
+        <Route path="/history" element={<History />} />
+        <Route path="/BookedHistory" element={<BookedHistory />} />
       </Routes>
     </Router>
   );
