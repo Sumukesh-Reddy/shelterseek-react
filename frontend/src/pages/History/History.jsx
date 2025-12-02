@@ -59,71 +59,112 @@ const History = () => {
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     setError(null);
-
+  
     try {
       let historyEntries = [];
       const token = localStorage.getItem('token');
       const userStr = localStorage.getItem('user');
-
+  
       if (token && userStr) {
         try {
           const user = JSON.parse(userStr);
           if (user.accountType === 'traveller') {
             const response = await fetch('http://localhost:3001/api/traveler/viewed-rooms', {
               headers: {
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
               }
             });
-
+  
             if (response.ok) {
               const data = await response.json();
-              historyEntries = (data.viewedRooms || []).map((entry, index) => ({
-                roomId: entry.roomId || entry,
-                viewedAt: entry.viewedAt,
-                order: index
-              }));
+              console.log('Viewed rooms API response:', data); // Debug log
+              
+              // Extract viewedRooms from response
+              const viewedRooms = data.viewedRooms || [];
+              console.log('Extracted viewed rooms:', viewedRooms); // Debug log
+              
+              // Map the data correctly
+              historyEntries = viewedRooms.map((entry, index) => {
+                // Handle different possible structures
+                const roomId = entry.roomId || entry._id || entry;
+                const viewedAt = entry.viewedAt || entry.timestamp || new Date().toISOString();
+                
+                return {
+                  roomId: roomId.toString(), // Ensure it's a string
+                  viewedAt: viewedAt,
+                  order: index
+                };
+              });
+              
+              console.log('Processed history entries:', historyEntries); // Debug log
+              
+              // Store in localStorage as backup
               localStorage.setItem('viewedHomes', JSON.stringify(historyEntries.map(entry => entry.roomId)));
             } else {
+              console.warn('Viewed rooms API failed:', response.status);
               historyEntries = parseLocalHistory();
             }
           } else {
             historyEntries = parseLocalHistory();
           }
         } catch (err) {
-          console.error('Traveler history fetch fallback:', err);
+          console.error('Traveler history fetch error:', err);
           historyEntries = parseLocalHistory();
         }
       } else {
         historyEntries = parseLocalHistory();
       }
-
+  
       if (!historyEntries.length) {
+        console.log('No history entries found');
         setHistoryRooms([]);
         return;
       }
-
+  
+      console.log('Fetching room details for:', historyEntries.length, 'entries');
+      
+      // Fetch all rooms
       const roomsResponse = await fetch('http://localhost:3001/api/rooms');
       if (!roomsResponse.ok) {
         throw new Error(`Failed to fetch rooms (status ${roomsResponse.status})`);
       }
-
+  
       const roomsResult = await roomsResponse.json();
+      console.log('Rooms API response:', roomsResult); // Debug log
+      
       if (roomsResult.status !== 'success' || !Array.isArray(roomsResult.data)) {
         throw new Error('Unexpected rooms response format');
       }
-
-      const roomMap = new Map(
-        roomsResult.data.map(room => [room._id || room.id, room])
-      );
-
+  
+      // Create a map for quick lookup
+      const roomMap = new Map();
+      roomsResult.data.forEach(room => {
+        const id = room._id || room.id;
+        if (id) {
+          roomMap.set(id.toString(), room);
+        }
+      });
+  
+      console.log('Room map size:', roomMap.size); // Debug log
+      
+      // Match history entries with room data
       const matched = historyEntries
         .map(entry => {
-          const room = roomMap.get(entry.roomId);
-          if (!room) return null;
-          return { room, viewedAt: entry.viewedAt, order: entry.order };
+          const room = roomMap.get(entry.roomId.toString());
+          if (!room) {
+            console.log('Room not found for ID:', entry.roomId);
+            return null;
+          }
+          return { 
+            room, 
+            viewedAt: entry.viewedAt, 
+            order: entry.order 
+          };
         })
         .filter(Boolean)
         .sort((a, b) => {
+          // Sort by viewedAt if available, otherwise by order
           if (a.viewedAt && b.viewedAt) {
             return new Date(b.viewedAt) - new Date(a.viewedAt);
           }
@@ -131,7 +172,8 @@ const History = () => {
           if (b.viewedAt) return 1;
           return a.order - b.order;
         });
-
+  
+      console.log('Matched rooms:', matched.length); // Debug log
       setHistoryRooms(matched);
     } catch (err) {
       console.error('History fetch error:', err);
@@ -145,8 +187,32 @@ const History = () => {
     fetchHistory();
   }, [fetchHistory]);
 
-  const handleClearHistory = () => {
+  const handleClearHistory = async () => {
+    // Clear local storage
     localStorage.setItem('viewedHomes', JSON.stringify([]));
+    
+    // If user is logged in, try to clear server history
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+    
+    if (token && userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        if (user.accountType === 'traveller') {
+          // Optionally call an endpoint to clear server history
+          await fetch('http://localhost:3001/api/traveler/clear-history', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Failed to clear server history:', err);
+      }
+    }
+    
     setHistoryRooms([]);
   };
 

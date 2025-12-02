@@ -1094,6 +1094,27 @@ app.get('/api/bookings/host', authenticateToken, async (req, res) => {
   }
 });
 
+app.post('/api/traveler/clear-history', authenticateToken, async (req, res) => {
+  if (req.user.accountType !== 'traveller') {
+    return res.status(403).json({ success: false, message: 'Traveler only' });
+  }
+  
+  try {
+    const traveler = await Traveler.findById(req.user._id);
+    if (!traveler) {
+      return res.status(404).json({ success: false, message: 'Traveler not found' });
+    }
+    
+    traveler.viewedRooms = [];
+    await traveler.save();
+    
+    res.json({ success: true, message: 'History cleared successfully' });
+  } catch (error) {
+    console.error('Error clearing history:', error);
+    res.status(500).json({ success: false, message: 'Failed to clear history' });
+  }
+});
+
 // Update Booking Status
 app.put('/api/rooms/:roomId/book', authenticateToken, async (req, res) => {
   const { booking = true } = req.body;
