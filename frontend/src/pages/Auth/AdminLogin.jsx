@@ -32,7 +32,7 @@ const AdminLogin = () => {
         localStorage.setItem('user', JSON.stringify(adminUser));
         
         // Redirect to admin page
-        navigate('/admin_page');
+        navigate('/admindashboard');
       } else {
         throw new Error('Invalid admin credentials');
       }
