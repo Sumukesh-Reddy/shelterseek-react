@@ -1,28 +1,78 @@
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
+const path = require('path'); //j
 const { GridFSBucket } = require('mongodb');
+const rateLimit = require('express-rate-limit'); //j
 const passport = require('passport');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
+const nodemailer = require('nodemailer');//j
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');//j
+const mkdirp = require('mkdirp');//j
+const hostController = require('./controllers/hostController');//j
+const adminController = require('./controllers/adminController');//j
 
 // Models
 const { Traveler, Host } = require('./model/usermodel');
-const RoomData = require('./model/room');
+const RoomData = require('./model/Room');//j
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+//j
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+const limiter = rateLimit({
+  max: 500,
+  windowMs: 60 * 60 * 1000,
+  message: 'Too many requests from this IP',
+});
+app.use('/api', limiter);
+
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
+// // Uploads folder
+const uploadsDir = path.join(__dirname, 'public/uploads');
+mkdirp.sync(uploadsDir);
+const upload = multer({
+  dest: uploadsDir,
+  storage: multer.diskStorage({
+    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname),
+  }),
+});
+
+// Main DB (Users, Sessions, Auth)
+
+
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/loginDataBase';
+const HOST_ADMIN_URI = process.env.HOST_ADMIN_URI || 'mongodb://localhost:27017/Host_Admin';
+const ADMIN_TRAVELER_URI = process.env.ADMIN_TRAVELER_URI || 'mongodb://localhost:27017/Admin_Traveler';
+const PAYMENT_DB_URI = process.env.PAYMENT_DB_URI || 'mongodb://localhost:27017/payment';
+
+
+//j
 // ==================== DATABASE CONNECTIONS ====================
 
 // Main DB (Users, Sessions, Auth)
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/yourdb')
   .then(() => console.log('Main MongoDB connected'))
   .catch(err => console.error('Main DB connection error:', err));
+
+//j
+const loginDataSchema = new mongoose.Schema({
+  name: String,
+  email: String,
+  accountType: String,
+  createdAt: { type: Date, default: Date.now },
+});
+const LoginData = mongoose.model('LoginData', loginDataSchema, 'LoginData');
+//j
 
 // Host/Admin DB (Listings, GridFS)
 const hostAdminUri = process.env.HOST_ADMIN_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/yourdb';
@@ -71,6 +121,34 @@ global.hostAdminConnection.on('connected', () => {
 global.hostAdminConnection.on('error', (err) => {
   console.error('Host_Admin DB connection error:', err.message);
 });
+
+//j
+const hostAdminConnection = mongoose.createConnection(HOST_ADMIN_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+const travelerConnection = mongoose.createConnection(ADMIN_TRAVELER_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+// const paymentConnection = mongoose.createConnection(PAYMENT_DB_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+
+hostAdminConnection.once('open', () => console.log('Connected to Host_Admin'));
+travelerConnection.once('open', () => console.log('Connected to Admin_Traveler'));
+paymentConnection.once('open', () => console.log('Connected to payment'));
+
+// // GridFS setup for Host_Admin DB
+let gfsBucket;
+hostAdminConnection.once('open', () => {
+  gfsBucket = new GridFSBucket(hostAdminConnection.db, { bucketName: 'images' });
+  console.log('GridFS Bucket initialized');
+});
+
+// const RoomData = hostAdminConnection.model('RoomData', new mongoose.Schema({}, { collection: 'RoomData' }));
+
+// ✅ ---- ROUTES ----
+
+
+// const createBookingModel = require('./model/booking');
+// const Booking = createBookingModel(paymentConnection);
+
+//j
+
+
 
 // ==================== MIDDLEWARE ====================
 
@@ -1051,6 +1129,115 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+//j
+
+app.get('/api/new-customers', async (req, res) => {
+  try {
+    const customers = await LoginData.find({ accountType: 'traveller' }).lean();
+    res.json({ data: customers });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/recent-activities', async (req, res) => {
+  try {
+    // Fetch last 10 updated or recently paid bookings
+    const activities = await Booking.find()
+      .sort({ updatedAt: -1, paymentDate: -1 })
+      .limit(10)
+      .lean();
+
+    const formattedActivities = activities.map(a => ({
+      name: a.userName,
+      action: `booked room ${a.roomId}`,
+      email: a.userEmail,
+      updatedAt: a.updatedAt || a.paymentDate,
+    }));
+
+    res.json({ data: formattedActivities });
+  } catch (err) {
+    console.error('Error fetching recent activities:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+app.get('/api/revenue', async (req, res) => {
+  try {
+    const bookings = await Booking.find().lean();
+
+    // ✅ Ensure amounts are valid numbers
+    const validBookings = bookings.filter(b => !isNaN(Number(b.amount)));
+
+    const totalRevenue = validBookings.reduce((sum, b) => sum + Number(b.amount), 0);
+
+    const now = new Date();
+    const thisMonthRevenue = validBookings
+      .filter(b => {
+        const checkIn = new Date(b.checkIn);
+        return checkIn.getMonth() === now.getMonth() && checkIn.getFullYear() === now.getFullYear();
+      })
+      .reduce((sum, b) => sum + Number(b.amount), 0);
+
+    const thisWeekRevenue = validBookings
+      .filter(b => {
+        const checkIn = new Date(b.checkIn);
+        const diffDays = (now - checkIn) / (1000 * 60 * 60 * 24);
+        return diffDays >= 0 && diffDays <= 7;
+      })
+      .reduce((sum, b) => sum + Number(b.amount), 0);
+
+    res.json({ totalRevenue, thisMonthRevenue, thisWeekRevenue });
+  } catch (err) {
+    console.error('Error in /api/revenue:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+app.get('/api/bookings/summary', async (req, res) => {
+  try {
+    const bookings = await Booking.find().lean();
+    const now = new Date();
+
+    let total = 0;
+    let thisMonth = 0;
+    let thisWeek = 0;
+
+    bookings.forEach((b) => {
+      if (!b.checkIn) return; // skip invalid entries
+      const checkInDate = new Date(b.checkIn);
+      if (isNaN(checkInDate)) return;
+
+      total++;
+
+      // ✅ Compare month & year to avoid cross-year errors
+      if (
+        checkInDate.getMonth() === now.getMonth() &&
+        checkInDate.getFullYear() === now.getFullYear()
+      ) {
+        thisMonth++;
+      }
+
+      // ✅ Compare day difference for current week
+      const diffDays = (now - checkInDate) / (1000 * 60 * 60 * 24);
+      if (diffDays >= 0 && diffDays <= 7) {
+        thisWeek++;
+      }
+    });
+
+    res.json({ total, thisMonth, thisWeek });
+  } catch (err) {
+    console.error('Error in /api/bookings/summary:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+//j
+
+
+
+
 app.get('/api/user-counts', async (req, res) => {
   try {
     // Count travelers and hosts separately by filtering by accountType
@@ -1070,6 +1257,265 @@ app.get('/api/user-counts', async (req, res) => {
     });
   }
 });
+
+//j
+
+app.get('/api/users', async (req, res) => {
+  try {
+    const { accountType } = req.query; // 'host' or 'traveller'
+
+    let filter = {};
+    if (accountType) {
+      filter.accountType = accountType; // filter by type
+    }
+
+    const users = await LoginData.find(filter).lean(); // or whatever your model name is
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
+app.get('/api/hosts', async (req, res) => {
+  try {
+    const hosts = await Host.find({}).lean();
+    const roomCounts = await RoomData.aggregate([
+      { $group: { _id: "$email", count: { $sum: 1 } } }
+    ]);
+
+    const countsMap = {};
+    roomCounts.forEach(rc => {
+      countsMap[rc._id] = rc.count;
+    });
+
+    hosts.forEach(h => {
+      h.roomCount = countsMap[h.email] || 0;
+    });
+
+    res.json(hosts); // ✅ send JSON for React
+  } catch (error) {
+    console.error('Error fetching hosts:', error);
+    res.status(500).json({ hosts: [], error: error.message });
+  }
+});
+
+app.get('/api/hosts/:hostId/rooms', async (req, res) => {
+  try {
+    const hostId = req.params.hostId;
+    const host = await Host.findById(hostId);
+    if (!host) return res.status(404).json([]);
+
+    const rooms = await RoomData.find({ email: host.email });
+    res.json(rooms);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json([]);
+  }
+});
+
+app.get('/api/rooms/host/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const rooms = await RoomData.find({ email }).lean();
+    console.log(`Rooms found for ${email}:`, rooms.length);
+    res.json({ roomCount: rooms.length, rooms });
+  } catch (error) {
+    console.error('Error fetching host rooms:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ==================== TRENDS ENDPOINTS ====================
+// ===================== TRENDING ROOMS (views + likes) =====================
+// ==================== ENHANCED TRENDS ENDPOINT ====================
+
+app.get('/api/trends', async (req, res) => {
+  try {
+    console.log('=== TRENDS ENDPOINT CALLED ===');
+    
+    // Fetch all travelers with room interactions
+    const travelers = await Traveler.find({}).lean();
+    console.log(`Total travelers: ${travelers.length}`);
+    
+    // Initialize room statistics
+    const roomStats = {};
+    const roomDetails = {}; // To store room details
+    
+    // Process each traveler
+    let travelersWithData = 0;
+    
+    travelers.forEach((traveler) => {
+      let hasData = false;
+      
+      // Process viewed rooms
+      if (traveler.viewedRooms && Array.isArray(traveler.viewedRooms)) {
+        traveler.viewedRooms.forEach(view => {
+          let roomId;
+          
+          // Extract room ID from different data structures
+          if (typeof view === 'string') {
+            roomId = view;
+          } else if (view && typeof view === 'object') {
+            // Try different possible field names
+            roomId = view.roomId || view._id || view.id;
+          }
+          
+          if (!roomId || typeof roomId !== 'string') {
+            return;
+          }
+          
+          hasData = true;
+          
+          if (!roomStats[roomId]) {
+            roomStats[roomId] = {
+              roomId: roomId,
+              totalViews: 0,
+              totalLikes: 0,
+              uniqueViewers: new Set(),
+              uniqueLikers: new Set()
+            };
+          }
+          
+          roomStats[roomId].totalViews++;
+          if (traveler._id) {
+            roomStats[roomId].uniqueViewers.add(traveler._id.toString());
+          }
+        });
+      }
+      
+      // Process liked rooms
+      if (traveler.likedRooms && Array.isArray(traveler.likedRooms)) {
+        traveler.likedRooms.forEach(roomId => {
+          if (!roomId || typeof roomId !== 'string') {
+            return;
+          }
+          
+          hasData = true;
+          
+          if (!roomStats[roomId]) {
+            roomStats[roomId] = {
+              roomId: roomId,
+              totalViews: 0,
+              totalLikes: 0,
+              uniqueViewers: new Set(),
+              uniqueLikers: new Set()
+            };
+          }
+          
+          roomStats[roomId].totalLikes++;
+          if (traveler._id) {
+            roomStats[roomId].uniqueLikers.add(traveler._id.toString());
+          }
+        });
+      }
+      
+      if (hasData) travelersWithData++;
+    });
+    
+    console.log(`Travelers with room data: ${travelersWithData}`);
+    console.log(`Unique rooms found: ${Object.keys(roomStats).length}`);
+    
+    // Convert to array
+    const trends = Object.values(roomStats).map(stat => ({
+      roomId: stat.roomId,
+      totalViews: stat.totalViews,
+      totalLikes: stat.totalLikes,
+      uniqueViewers: stat.uniqueViewers.size,
+      uniqueLikers: stat.uniqueLikers.size,
+      engagementRate: stat.totalViews > 0 ? 
+        Math.round((stat.totalLikes / stat.totalViews) * 100) : 0
+    }));
+    
+    // Sort by total views (descending)
+    trends.sort((a, b) => b.totalViews - a.totalViews);
+    
+    // Fetch room details for the top rooms
+    const topRoomIds = trends.slice(0, 50).map(t => t.roomId);
+    
+    try {
+      const rooms = await RoomData.find({
+        _id: { $in: topRoomIds.map(id => {
+          try {
+            return new mongoose.Types.ObjectId(id);
+          } catch {
+            return null;
+          }
+        }).filter(id => id !== null) }
+      }).select('title name email location price').lean();
+      
+      // Map room details by ID
+      const roomDetailsMap = {};
+      rooms.forEach(room => {
+        roomDetailsMap[room._id.toString()] = {
+          title: room.title || 'Untitled Room',
+          host: room.name || 'Unknown Host',
+          location: room.location || 'Unknown Location',
+          price: room.price || 0
+        };
+      });
+      
+      // Add room details to trends
+      const trendsWithDetails = trends.map(trend => ({
+        ...trend,
+        roomName: roomDetailsMap[trend.roomId]?.title || `Room ${trend.roomId.substring(0, 8)}...`,
+        host: roomDetailsMap[trend.roomId]?.host || 'Unknown',
+        location: roomDetailsMap[trend.roomId]?.location || 'Unknown',
+        price: roomDetailsMap[trend.roomId]?.price || 0
+      }));
+      
+      // Calculate summary
+      const summary = {
+        totalRooms: trends.length,
+        totalViews: trends.reduce((sum, t) => sum + t.totalViews, 0),
+        totalLikes: trends.reduce((sum, t) => sum + t.totalLikes, 0),
+        totalUniqueViewers: new Set(trends.flatMap(t => t.uniqueViewers)).size,
+        totalUniqueLikers: new Set(trends.flatMap(t => t.uniqueLikers)).size,
+        avgEngagementRate: trends.length > 0 ? 
+          Math.round(trends.reduce((sum, t) => sum + t.engagementRate, 0) / trends.length) : 0
+      };
+      
+      res.json({
+        success: true,
+        trends: trendsWithDetails,
+        summary: summary,
+        count: trends.length
+      });
+      
+    } catch (roomError) {
+      console.error('Error fetching room details:', roomError);
+      
+      // Return trends without room details if room fetch fails
+      const summary = {
+        totalRooms: trends.length,
+        totalViews: trends.reduce((sum, t) => sum + t.totalViews, 0),
+        totalLikes: trends.reduce((sum, t) => sum + t.totalLikes, 0)
+      };
+      
+      res.json({
+        success: true,
+        trends: trends,
+        summary: summary,
+        count: trends.length,
+        note: 'Room details not available'
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error in /api/trends:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch trends data',
+      error: error.message
+    });
+  }
+});
+
+
+app.delete('/api/users/:id', adminController.deleteUser);
+//j
+
 
 // ==================== START SERVER ====================
 
