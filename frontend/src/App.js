@@ -28,6 +28,7 @@ import AdminMaps from './pages/AdminMaps/AdminMaps';
 import AdminMapsView from './pages/AdminMaps/AdminMapsView';
 import HostDetails from './pages/AdminNotifications/HostDetails';
 import AdminTrends from './pages/AdminTrends/AdminTrends';
+import TravelerDetails from './pages/AdminNotifications/TravelerDetails';
 
 
 function App() {
@@ -62,6 +63,7 @@ function App() {
         <Route path="/admin/maps/:hostEmail" element={<AdminMapsView />} />
         <Route path="/host/:email" element={<HostDetails />} />
         <Route path="/admin_trends" element={<AdminTrends />} />
+        <Route path="/traveler/:email/bookings" element={<TravelerDetails />} />
       </Routes>
     </Router>
   );
