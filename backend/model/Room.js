@@ -50,6 +50,12 @@ const roomDataSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  bookedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    default: null
+  },
+  
   discount: {
     type: Number,
     default: 0
@@ -58,9 +64,7 @@ const roomDataSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  availability: [{
-    type: Date
-  }], // Added availability array
+  unavailableDates: [Date],
   amenities: [String],
   images: [mongoose.Schema.Types.ObjectId], 
   reviews: [Object], 

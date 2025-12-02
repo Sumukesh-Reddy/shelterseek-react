@@ -7,7 +7,6 @@ import './host_index.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faUser } from '@fortawesome/free-solid-svg-icons';
 import Footer from '../../components/Footer/Footer';
-import AvailabilityCalendar from '../../components/AvailabilityCalendar/AvailabilityCalendar';
 
 // Fix Leaflet default icon
 delete L.Icon.Default.prototype._getIconUrl;
@@ -70,7 +69,7 @@ const HostIndex = () => {
     discount: 0,
     images: [],
     existingImages: [],
-    availability: [],
+    unavailableDates: [],
   });
 
   const [previewImages, setPreviewImages] = useState([]);
@@ -157,9 +156,12 @@ const HostIndex = () => {
         discount: listing.discount || 0,
         images: [],
         existingImages: listing.images || [],
-        availability: listing.availability 
-          ? listing.availability.map(date => typeof date === 'string' ? date : new Date(date).toISOString().split('T')[0])
-          : [],
+        unavailableDates: listing.unavailableDates 
+  ? listing.unavailableDates.map(date => 
+      typeof date === 'string' ? date : new Date(date).toISOString().split('T')[0]
+    )
+  : [],
+
       };
       setFormData(newFormData);
 
@@ -225,14 +227,14 @@ const HostIndex = () => {
       alert('Failed to load listing for editing');
     }
   };
+// Handle host unavailable date changes
+const handleUnavailableChange = (dates) => {
+  setFormData((prev) => ({
+    ...prev,
+    unavailableDates: dates,
+  }));
+};
 
-  // Handle availability date changes
-  const handleAvailabilityChange = (dates) => {
-    setFormData((prev) => ({
-      ...prev,
-      availability: dates,
-    }));
-  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -376,10 +378,11 @@ const HostIndex = () => {
         formData.images.forEach((file) => {
           data.append('images', file);
         });
-      } else if (key === 'availability') {
-        // Append availability dates as JSON array string
-        data.append(key, JSON.stringify(formData.availability || []));
-      } else if (key !== 'existingImages') {
+      } else if (key === 'unavailableDates') {
+        // Append unavailable dates as JSON array string
+        data.append(key, JSON.stringify(formData.unavailableDates || []));
+      }
+       else if (key !== 'existingImages') {
         data.append(key, formData[key] || '');
       }
     });
@@ -669,21 +672,23 @@ const HostIndex = () => {
             </div>
 
             <div className="form-group">
-              <label>Availability Calendar</label>
-              <p style={{ fontSize: '14px', color: '#666', marginBottom: '10px' }}>
-                Select dates when your room is available (3 months from today)
-              </p>
-              <AvailabilityCalendar
-                selectedDates={formData.availability}
-                onDatesChange={handleAvailabilityChange}
-                minDate={new Date()}
-                maxDate={(() => {
-                  const date = new Date();
-                  date.setMonth(date.getMonth() + 3);
-                  return date;
-                })()}
-              />
-            </div>
+            <label>Host Unavailable Days</label>
+            <p style={{ fontSize: '14px', color: '#666', marginBottom: '10px' }}>
+              Select the dates when you are <strong>not available</strong> to host
+              (next 3 months).
+            </p>
+            <unavailableDatesCalendar
+              selectedDates={formData.unavailableDates}
+              onDatesChange={handleUnavailableChange}
+              minDate={new Date()}
+              maxDate={(() => {
+                const date = new Date();
+                date.setMonth(date.getMonth() + 3);
+                return date;
+              })()}
+            />
+          </div>
+
 
             <div className="form-group">
               <label>Location Map (Click to set)</label>

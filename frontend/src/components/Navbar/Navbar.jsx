@@ -137,7 +137,8 @@ useEffect(() => {
                 </button>
                 <ul>
                   <li><Link to="/profile" onClick={closeAllMenus}>Profile</Link></li>
-                  <li><Link to="/history" onClick={closeAllMenus}>History</Link></li>
+                  <li><Link to="/history" onClick={closeAllMenus}>viewed History</Link></li>
+                  <li><Link to="/BookedHistory" onClick={closeAllMenus}>Booked History</Link></li>
                   <li><button onClick={handleLogout} className="logout-button">Logout</button></li>
                 </ul>
               </div>
@@ -170,7 +171,8 @@ useEffect(() => {
                 </button>
                 <ul>
                   <li><Link to="/profile" onClick={closeAllMenus}>Profile</Link></li>
-                  <li><Link to="/history" onClick={closeAllMenus}>History</Link></li>
+                  <li><Link to="/history" onClick={closeAllMenus}>Viewed History</Link></li>
+                  <li><Link to="/BookedHistory" onClick={closeAllMenus}>Booked History</Link></li>
                   <li><button onClick={toggleLoginSelection} className="menu-login-option">Login / Sign Up</button></li>
                 </ul>
               </div>
@@ -275,7 +277,8 @@ useEffect(() => {
           <ul>
             <li><Link to="/profile" onClick={closeAllMenus}>Profile</Link></li>
             <li><Link to="/messages" onClick={closeAllMenus}>Inbox</Link></li>
-            <li><Link to="/history" onClick={closeAllMenus}>History</Link></li>
+            <li><Link to="/history" onClick={closeAllMenus}>Viewed History</Link></li>
+            <li><Link to="/Bookedhistory" onClick={closeAllMenus}>Booked History</Link></li>
             <li><Link to="/wishlist" onClick={closeAllMenus}>Wishlist</Link></li>
             <li><Link to="/about" onClick={closeAllMenus}>About</Link></li>
             {isLoggedIn ? (

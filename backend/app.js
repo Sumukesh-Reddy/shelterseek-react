@@ -31,6 +31,24 @@ global.hostAdminConnection = mongoose.createConnection(hostAdminUri, {
   w: 'majority'
 });
 
+const paymentDBUri = process.env.PAYMENT_DB_URI || 'mongodb://localhost:27017/payment';
+const paymentConnection = mongoose.createConnection(paymentDBUri, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  retryWrites: true,
+  w: 'majority'
+});
+
+paymentConnection.on('connected', () => {
+  console.log('Connected to Payment/Booking database');
+});
+
+paymentConnection.on('error', (err) => {
+  console.error('Payment/Booking DB connection error:', err.message);
+});
+
+// Booking Model using payment database
+const Booking = paymentConnection.model('Booking', require('./model/Booking').schema);
 global.hostAdminConnection.on('connected', () => {
   console.log('Connected to Host_Admin database');
   
@@ -173,9 +191,73 @@ app.post('/send-otp', async (req, res) => {
     await transporter.sendMail({
       from: emailUser,
       to: email,
-      subject: 'Your OTP Code',
-      text: `Your verification code is ${otp}. Expires in 10 minutes.`
+      subject: '🔐 Your ShelterSeek Verification Code',
+    
+      html: `
+        <div style="
+            max-width: 480px;
+            margin: auto;
+            padding: 25px;
+            background: #ffffff;
+            border-radius: 12px;
+            font-family: Arial, Helvetica, sans-serif;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            color: #333;
+            line-height: 1.6;
+        ">
+    
+            <h2 style="
+                text-align: center;
+                color: #d72d6e;
+                margin-bottom: 10px;
+                font-size: 24px;
+            ">
+                🔐 ShelterSeek Verification
+            </h2>
+    
+            <p style="font-size: 15px; margin-bottom: 18px;">
+                Hello Traveler 👋,<br><br>
+                Use the following One-Time Password (OTP) to verify your account:
+            </p>
+    
+            <div style="
+                text-align: center;
+                background: #ffe8f1;
+                border-left: 5px solid #d72d6e;
+                padding: 18px 20px;
+                border-radius: 8px;
+                margin: 20px 0;
+            ">
+                <p style="
+                    font-size: 34px;
+                    letter-spacing: 4px;
+                    color: #d72d6e;
+                    font-weight: bold;
+                    margin: 0;
+                ">
+                    ${otp}
+                </p>
+                <p style="font-size: 13px; color: #777; margin-top: 8px;">
+                    ⏳ Valid for 10 minutes
+                </p>
+            </div>
+    
+            <p style="font-size: 14px; color:#444;">
+                ⚠️ Please keep this code confidential.<br>
+                Do not share it with anyone for your security.
+            </p>
+    
+            <p style="font-size: 13px; color:#777; margin-top: 25px; text-align: center;">
+                If you did not request this verification code, you may safely ignore this email ❌.
+                <br><br>
+                — Team ShelterSeek 💖
+            </p>
+    
+        </div>
+      `
     });
+    
+    
     res.json({ success: true, message: 'OTP sent successfully!' });
   } catch (error) {
     if (!isProd) {
@@ -433,61 +515,505 @@ app.post('/reset-password', async (req, res) => {
 
 app.get('/api/rooms', async (req, res) => {
   try {
-    const rooms = await RoomData.find({
-      $or: [{ status: /verified/i }, { status: /approved/i }],
-      booking: { $ne: true }
-    }).lean();
+    // Extract user from token if provided
+    let userId = null;
+    const token = req.headers['authorization']?.split(' ')[1];
+    
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'myjwtsecret');
+        const user = await Traveler.findById(decoded.id) || await Host.findById(decoded.id);
+        if (user) {
+          userId = user._id.toString();
+        }
+      } catch (err) {
+        // Invalid token, treat as guest
+      }
+    }
 
-    const processed = rooms.map(r => ({
-      _id: r._id.toString(),
-      id: r._id.toString(),
-      name: r.name || 'Unknown',
-      title: r.title || 'Untitled',
-      description: r.description || '',
-      price: r.price || 0,
-      location: r.location || '',
-      coordinates: r.coordinates || { lat: 13.0827, lng: 80.2707 },
-      images: r.images || [],
-      amenities: r.amenities || [],
-      availability: r.availability || [],
-      propertyType: r.propertyType || '',
-      capacity: r.capacity || 0,
-      roomType: r.roomType || '',
-      bedrooms: r.bedrooms || 0,
-      beds: r.beds || 0,
-      maxdays: r.maxdays || 10,
-      roomSize: r.roomSize || 'Medium',
-      hostGender: r.hostGender || '',
-      foodFacility: r.foodFacility || '',
-      discount: r.discount || 0,
-      likes: r.likes || 0,
-      reviews: r.reviews || [],
-      booking: false,
-      createdAt: r.createdAt
-    }));
+    // Build query based on user status
+    let query = {
+      $or: [{ status: /verified/i }, { status: /approved/i }]
+    };
 
-    res.json({ status: 'success', data: processed });
+    if (!userId) {
+      // Guest user: only see non-booked rooms
+      query.booking = { $ne: true };
+    } else {
+      // Logged-in user: see non-booked rooms OR rooms booked by themselves
+      query = {
+        $and: [
+          { $or: [{ status: /verified/i }, { status: /approved/i }] },
+          {
+            $or: [
+              { booking: { $ne: true } },  // Available rooms
+              { bookedBy: userId }          // OR rooms booked by this user
+            ]
+          }
+        ]
+      };
+      
+      // If user is a host, show all their rooms regardless of booking status
+      const user = await Traveler.findById(userId) || await Host.findById(userId);
+      if (user && user.accountType === 'host') {
+        query = {
+          $or: [
+            { email: user.email },  // Host's own rooms
+            {
+              $and: [
+                { $or: [{ status: /verified/i }, { status: /approved/i }] },
+                {
+                  $or: [
+                    { booking: { $ne: true } },
+                    { bookedBy: userId }
+                  ]
+                }
+              ]
+            }
+          ]
+        };
+      }
+    }
+
+    const rooms = await RoomData.find(query).lean();
+
+    // Process each room to format the data properly
+    const processed = rooms.map(room => {
+      const images = room.images?.map(img => {
+        if (typeof img === 'object' && img.$oid) {
+          return `/api/images/${img.$oid}`;
+        }
+        return img;
+      }) || [];
+
+      const coordinates = room.coordinates || { lat: 13.0827, lng: 80.2707 };
+
+      const unavailableDates = room.unavailableDates?.map(date => {
+        if (date?.$date) {
+          return new Date(date.$date).toISOString().split('T')[0];
+        }
+        return date instanceof Date ? date.toISOString().split('T')[0] : date;
+      }) || [];
+
+      return {
+        _id: room._id?.toString(),
+        id: room._id?.toString(),
+        name: room.name || 'Unknown',
+        title: room.title || 'Untitled',
+        description: room.description || '',
+        price: room.price || 0,
+        location: room.location || '',
+        coordinates,
+        roomLocation: room.roomLocation || '',
+        transportDistance: room.transportDistance || '',
+        images,
+        amenities: room.amenities || [],
+        unavailableDates,
+        propertyType: room.propertyType || '',
+        capacity: room.capacity || 0,
+        roomType: room.roomType || '',
+        bedrooms: room.bedrooms || 0,
+        beds: room.beds || 0,
+        roomSize: room.roomSize || 'Medium',
+        foodFacility: room.foodFacility || '',
+        discount: room.discount || 0,
+        maxdays: room.maxdays || 10,
+        likes: room.likes || 0,
+        reviews: room.reviews || [],
+        booking: room.booking || false,
+        bookedBy: room.bookedBy || null,
+        isBookedByMe: userId ? room.bookedBy?.toString() === userId : false,
+        status: room.status || 'pending',
+        createdAt: room.createdAt,
+        updatedAt: room.updatedAt
+      };
+    });
+
+    res.json({
+      status: 'success',
+      count: processed.length,
+      data: processed
+    });
+
   } catch (error) {
-    res.status(500).json({ status: 'error', message: 'Failed to fetch rooms' });
+    console.error('Error fetching rooms:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch rooms'
+    });
   }
 });
 
+
 // Create Booking
+// In app.js, replace the /api/bookings endpoint with this corrected version:
+
 app.post('/api/bookings', authenticateToken, async (req, res) => {
-  const { roomId, checkIn, checkOut, days, totalCost } = req.body;
-  if (!roomId || !checkIn || !checkOut || !days || !totalCost) {
-    return res.status(400).json({ success: false, message: 'Missing fields' });
+  try {
+    const { 
+      roomId, 
+      checkIn, 
+      checkOut, 
+      days, 
+      totalCost, 
+      hostEmail, 
+      guests = 1,
+      guestDetails = [],
+      specialRequests = '',
+      paymentDetails = {}
+    } = req.body;
+    
+    if (!roomId || !checkIn || !checkOut || !days || !totalCost) {
+      return res.status(400).json({ success: false, message: 'Missing required fields' });
+    }
+
+    // Fetch room details
+    const room = await RoomData.findById(roomId);
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Room not found' });
+    }
+
+    // Check capacity
+    if (guests > room.capacity) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Maximum capacity is ${room.capacity} guests` 
+      });
+    }
+
+    // Check if room is already booked for these dates
+    const existingBooking = await Booking.findOne({
+      roomId: roomId,
+      $or: [
+        {
+          checkIn: { $lte: new Date(checkOut) },
+          checkOut: { $gte: new Date(checkIn) }
+        }
+      ],
+      bookingStatus: { $in: ['confirmed', 'pending', 'checked_in'] }
+    });
+
+    if (existingBooking) {
+      return res.status(400).json({ success: false, message: 'Room already booked for selected dates' });
+    }
+
+    // Generate transaction ID if not provided
+    const transactionId = paymentDetails.transactionId || 
+      `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
+    // Create booking record in payment database
+    const booking = new Booking({
+      travelerId: req.user._id,
+      travelerName: req.user.name,
+      travelerEmail: req.user.email,
+      roomId: roomId,
+      roomTitle: room.title || room.name,
+      hostId: room._id.toString(),
+      hostEmail: hostEmail || room.email,
+      checkIn: new Date(checkIn),
+      checkOut: new Date(checkOut),
+      days: days,
+      totalCost: totalCost,
+      guests: guests,
+      guestDetails: guestDetails.map(guest => ({
+        guestName: guest.guestName,
+        guestAge: guest.guestAge ? parseInt(guest.guestAge) : undefined,
+        guestGender: guest.guestGender,
+        guestContact: guest.guestContact,
+        govtIdType: guest.govtIdType,
+        govtIdNumber: guest.govtIdNumber
+      })),
+      paymentDetails: {
+        paymentMethod: paymentDetails.paymentMethod || 'credit_card',
+        cardLastFour: paymentDetails.cardLastFour,
+        cardType: paymentDetails.cardType,
+        transactionId: transactionId,
+        paymentGateway: paymentDetails.paymentGateway || 'razorpay',
+        paymentDate: new Date()
+      },
+      bookingStatus: 'confirmed',
+      paymentStatus: 'completed',
+      specialRequests: specialRequests,
+      bookedAt: new Date()
+    });
+
+    await booking.save();
+
+    // Update room with booking status and unavailable dates
+    await RoomData.findByIdAndUpdate(roomId, {
+      booking: true,
+      bookedBy: req.user._id,
+      $addToSet: { unavailableDates: { $each: generateDateRange(checkIn, checkOut) } }
+    });
+
+    // Update user's booking history (for travelers)
+    if (req.user.accountType === 'traveller') {
+      try {
+        const traveler = await Traveler.findById(req.user._id);
+        if (traveler) {
+          if (!traveler.bookings) traveler.bookings = [];
+          
+          const userBooking = {
+            bookingId: booking.bookingId || booking._id.toString(),
+            roomId: roomId,
+            roomTitle: room.title || room.name,
+            hostId: room._id.toString(),
+            hostEmail: hostEmail || room.email,
+            checkIn: new Date(checkIn),
+            checkOut: new Date(checkOut),
+            days: days,
+            totalCost: totalCost,
+            status: 'confirmed',
+            bookedAt: new Date(),
+            guests: guests,
+            guestDetails: guestDetails,
+            paymentStatus: 'completed',
+            paymentMethod: paymentDetails.paymentMethod || 'credit_card',
+            transactionId: transactionId,
+            specialRequests: specialRequests
+          };
+          
+          traveler.bookings.unshift(userBooking);
+          
+          if (traveler.bookings.length > 100) {
+            traveler.bookings = traveler.bookings.slice(0, 100);
+          }
+          
+          await traveler.save();
+          console.log('Booking added to traveler:', traveler._id);
+        }
+      } catch (err) {
+        console.error('Error updating traveler bookings:', err);
+        // Don't fail the whole request if this fails
+      }
+    }
+
+    // Update host's booking history
+    if (room.email) {
+      try {
+        const host = await Host.findOne({ email: room.email });
+        if (host) {
+          if (!host.hostBookings) host.hostBookings = [];
+          
+          const hostBooking = {
+            bookingId: booking.bookingId || booking._id.toString(),
+            roomId: roomId,
+            roomTitle: room.title || room.name,
+            travelerId: req.user._id,
+            travelerName: req.user.name,
+            travelerEmail: req.user.email,
+            checkIn: new Date(checkIn),
+            checkOut: new Date(checkOut),
+            days: days,
+            totalCost: totalCost,
+            status: 'confirmed',
+            bookedAt: new Date(),
+            guests: guests,
+            guestDetails: guestDetails,
+            specialRequests: specialRequests,
+            transactionId: transactionId
+          };
+          
+          host.hostBookings.unshift(hostBooking);
+          
+          if (host.hostBookings.length > 100) {
+            host.hostBookings = host.hostBookings.slice(0, 100);
+          }
+          
+          await host.save();
+          console.log('Booking added to host:', host._id);
+        }
+      } catch (err) {
+        console.error('Error updating host bookings:', err);
+        // Don't fail the whole request if this fails
+      }
+    }
+
+    // Send confirmation email (optional)
+    try {
+      const emailUser = process.env.EMAIL_USER || process.env.EMAIL;
+      const hasEmailCreds = Boolean(emailUser && process.env.EMAIL_PASS);
+      
+      if (hasEmailCreds) {
+        const transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: { user: emailUser, pass: process.env.EMAIL_PASS }
+        });
+
+        await transporter.sendMail({
+          from: emailUser,
+          to: req.user.email,
+          subject: 'Booking Confirmation - ShelterSeek',
+          html: `
+            <div style="
+                  max-width: 520px;
+                  margin: auto;
+                  padding: 25px;
+                  background: #ffffff;
+                  border-radius: 14px;
+                  font-family: 'Segoe UI', Arial, sans-serif;
+                  box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+                  line-height: 1.5;
+                  color: #333;
+            ">
+                  <h1 style="
+                      color: #d72d6e;
+                      text-align: center;
+                      font-size: 28px;
+                      margin-bottom: 5px;
+                  ">
+                      Hello Traveler! 🏡
+                  </h1>
+
+                  <h2 style="
+                      text-align: center;
+                      color: #d72d6e;
+                      font-size: 22px;
+                      margin-bottom: 20px;
+                  ">
+                      🎉 Your Booking is Confirmed!
+                  </h2>
+
+                  <div style="
+                      background: #ffe8f1;
+                      border-left: 5px solid #d72d6e;
+                      padding: 15px 18px;
+                      border-radius: 8px;
+                      margin-bottom: 20px;
+                  ">
+                      <p style="margin: 8px 0;"><strong>🆔 Booking ID:</strong> ${booking.bookingId || booking._id}</p>
+                      <p style="margin: 8px 0;"><strong>🏨 Room:</strong> ${room.title || room.name}</p>
+                      <p style="margin: 8px 0;"><strong>📅 Check-in:</strong> ${formatDate(checkIn)}</p>
+                      <p style="margin: 8px 0;"><strong>📅 Check-out:</strong> ${formatDate(checkOut)}</p>
+                      <p style="margin: 8px 0;"><strong>💰 Total Cost:</strong> 
+                          <span style="color:#d72d6e; font-weight:600;">₹${totalCost}</span>
+                      </p>
+                      <p style="margin: 8px 0;"><strong>🔖 Transaction ID:</strong> ${transactionId}</p>
+                  </div>
+
+                  <p style="font-size: 15px; color:#555; text-align:center;">
+                      Thank you for choosing <strong>ShelterSeek</strong> for your stay! 💖  
+                      <br>We wish you a wonderful and memorable experience 😊
+                  </p>
+
+                  <div style="text-align:center; margin-top: 18px;">
+                      <a href="http://localhost:3000/BookedHistory" style="
+                          padding: 10px 18px;
+                          background: #d72d6e;
+                          color: white;
+                          text-decoration: none;
+                          border-radius: 8px;
+                          font-size: 15px;
+                          font-weight: 600;
+                      ">🔍 View Booking Details</a>
+                  </div>
+
+                  <p style="text-align:center; margin-top:25px; color:#888; font-size:13px;">
+                      Need help? Contact us anytime at  
+                      <a style="color:#d72d6e;" href="mailto:shelterseekrooms@gmail.com">shelterseekrooms@gmail.com</a> 📩
+                  </p>
+            </div>
+            `
+
+        });
+      }
+    } catch (emailErr) {
+      console.error('Failed to send confirmation email:', emailErr);
+      // Don't fail the whole request if email fails
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Booking confirmed successfully!', 
+      bookingId: booking.bookingId || booking._id,
+      transactionId: transactionId,
+      booking: {
+        id: booking._id,
+        bookingId: booking.bookingId || booking._id,
+        roomTitle: booking.roomTitle,
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        totalCost: booking.totalCost
+      }
+    });
+
+  } catch (error) {
+    console.error('Booking error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to complete booking',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
+});
 
-  const room = await RoomData.findById(roomId);
-  if (!room || room.booking) {
-    return res.status(400).json({ success: false, message: 'Room unavailable' });
+// Helper functions - add these near the top of your app.js file
+function generateDateRange(startDate, endDate) {
+  const dates = [];
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const current = new Date(start);
+  
+  while (current <= end) {
+    dates.push(new Date(current).toISOString().split('T')[0]);
+    current.setDate(current.getDate() + 1);
   }
+  
+  return dates;
+}
 
-  room.booking = true;
-  await room.save();
+function formatDate(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+}
 
-  res.json({ success: true, message: 'Booking confirmed', booking: { roomId, checkIn, checkOut, days, totalCost } });
+// Get traveler's booking history
+app.get('/api/bookings/history', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.accountType !== 'traveller') {
+      return res.status(403).json({ success: false, message: 'Only travelers can access booking history' });
+    }
+
+    // Fetch from bookings collection
+    const bookings = await Booking.find({ travelerId: req.user._id })
+      .sort({ bookedAt: -1 })
+      .lean();
+
+    res.json({
+      success: true,
+      count: bookings.length,
+      bookings: bookings
+    });
+  } catch (error) {
+    console.error('Error fetching booking history:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch booking history' });
+  }
+});
+
+// Get host's bookings
+app.get('/api/bookings/host', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.accountType !== 'host') {
+      return res.status(403).json({ success: false, message: 'Only hosts can access host bookings' });
+    }
+
+    const bookings = await Booking.find({ hostEmail: req.user.email })
+      .sort({ bookedAt: -1 })
+      .lean();
+
+    res.json({
+      success: true,
+      count: bookings.length,
+      bookings: bookings
+    });
+  } catch (error) {
+    console.error('Error fetching host bookings:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch host bookings' });
+  }
 });
 
 // Update Booking Status
