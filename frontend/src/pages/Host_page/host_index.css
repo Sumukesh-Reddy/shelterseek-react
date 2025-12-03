@@ -438,17 +438,7 @@ input[type="checkbox"]::-webkit-inner-spin-button {
   }
 }
 
-.host-traveler {
-  margin-left: auto;
-}
 
-.host-traveler button {
-  background: none;
-  border: none;
-  font-size: 28px;
-  cursor: pointer;
-  color: #333;
-}
 
 .host-user-menu {
   display: none;
