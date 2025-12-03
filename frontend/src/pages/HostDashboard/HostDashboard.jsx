@@ -42,7 +42,7 @@ const styles = {
     flexDirection: 'column',
   },
   mainContent: {
-    marginLeft: '270px',   // Fixed: was 250px → now no overlap!
+    marginLeft: '270px',  
     flex: 1,
     padding: '2rem',
     minHeight: '100vh',
