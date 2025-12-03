@@ -30,10 +30,12 @@ import HostDetails from './pages/AdminNotifications/HostDetails';
 import AdminTrends from './pages/AdminTrends/AdminTrends';
 import TravelerDetails from './pages/AdminNotifications/TravelerDetails';
 import HotelChatbot  from './pages/HotelChatBot/HotelChatbot';
+import ChatbotIcon from './components/ChatbotIcon/ChatbotIcon';
 
 function App() {
   return (
     <Router>
+      <ChatbotIcon />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/about" element={<About />} />
