@@ -375,7 +375,7 @@ const AdminTrends = () => {
                 <th style={styles.th}>Likes</th>
                 <th style={styles.th}>Engagement</th>
                 <th style={styles.th}>Price</th>
-                <th style={styles.th}>Action</th>
+                {/* <th style={styles.th}>Action</th> */}
               </tr>
             </thead>
             <tbody>

@@ -16,16 +16,21 @@ function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
 
   // ✅ Room counts state extended with shared/full
-  const [roomCounts, setRoomCounts] = useState({
-    total: 0,
-    available: 0,
-    booked: 0,
-    thisMonthBooked: 0,
-    thisWeekBooked: 0,
-    sharedRooms: 0,
-    fullRooms: 0
-  });
-  const [loadingRooms, setLoadingRooms] = useState(true);
+ const [roomCounts, setRoomCounts] = useState({
+  total: 0,
+  available: 0,
+  booked: 0,
+  thisMonthBooked: 0,
+  thisWeekBooked: 0
+});
+const [loadingRooms, setLoadingRooms] = useState(true);
+
+// NEW
+const [roomTypeCounts, setRoomTypeCounts] = useState({
+  shared: 0,
+  full: 0
+});
+
 
   // fetch data
   useEffect(() => {
@@ -47,57 +52,54 @@ function AdminDashboard() {
       });
 
     // ✅ Fetch room counts + shared/full from popularTypes
-    fetch('http://localhost:3001/api/rooms/count')
-      .then(res => res.json())
-      .then(data => {
-        console.log('Room counts response:', data);
-        if (data.success) {
-          const counts = data.counts || {};
-          let shared = 0;
-          let full = 0;
+   fetch('http://localhost:3001/api/rooms/count')
+  .then(res => res.json())
+  .then(data => {
+    console.log('Room counts response:', data);
+    if (data.success) {
+      setRoomCounts(data.counts);
 
-          if (Array.isArray(data.popularTypes)) {
-            data.popularTypes.forEach(t => {
-              if (t._id === 'Shared') shared = t.count || 0;
-              if (t._id === 'Full') full = t.count || 0;
-            });
+      // 🔹 NEW: derive Shared / Full counts from popularTypes
+      let shared = 0;
+      let full = 0;
+
+      if (Array.isArray(data.popularTypes)) {
+        data.popularTypes.forEach((t) => {
+          if (/shared/i.test(t._id)) {
+            shared = t.count;
+          } else if (/full/i.test(t._id)) {
+            full = t.count;
           }
-
-          setRoomCounts({
-            total: counts.total || 0,
-            available: counts.available || 0,
-            booked: counts.booked || 0,
-            thisMonthBooked: counts.thisMonthBooked || 0,
-            thisWeekBooked: counts.thisWeekBooked || 0,
-            sharedRooms: shared,
-            fullRooms: full
-          });
-        } else {
-          console.error('Failed to fetch room counts:', data.message);
-          setRoomCounts({
-            total: 0,
-            available: 0,
-            booked: 0,
-            thisMonthBooked: 0,
-            thisWeekBooked: 0,
-            sharedRooms: 0,
-            fullRooms: 0
-          });
-        }
-      })
-      .catch(err => {
-        console.error('Error fetching room counts:', err);
-        setRoomCounts({
-          total: 0,
-          available: 0,
-          booked: 0,
-          thisMonthBooked: 0,
-          thisWeekBooked: 0,
-          sharedRooms: 0,
-          fullRooms: 0
         });
-      })
-      .finally(() => setLoadingRooms(false));
+      }
+
+      setRoomTypeCounts({ shared, full });
+    } else {
+      console.error('Failed to fetch room counts:', data.message);
+      setRoomCounts({
+        total: 0,
+        available: 0,
+        booked: 0,
+        thisMonthBooked: 0,
+        thisWeekBooked: 0
+      });
+      setRoomTypeCounts({ shared: 0, full: 0 });
+    }
+  })
+  .catch(err => {
+    console.error('Error fetching room counts:', err);
+    setRoomCounts({
+      total: 0,
+      available: 0,
+      booked: 0,
+      thisMonthBooked: 0,
+      thisWeekBooked: 0
+    });
+    setRoomTypeCounts({ shared: 0, full: 0 });
+  })
+  .finally(() => setLoadingRooms(false));
+
+      
 
     // Fetch new customers
     fetch('http://localhost:3001/api/new-customers')
@@ -202,10 +204,10 @@ function AdminDashboard() {
                   Total: {roomCounts.total} | Booked: {roomCounts.booked}
                 </div>
                 <div className="admin-dashboard-meta-line">
-                  Shared Rooms: {roomCounts.sharedRooms}
+                  Shared Rooms: {roomTypeCounts.shared}
                 </div>
                 <div className="admin-dashboard-meta-line">
-                  Full Rooms: {roomCounts.fullRooms}
+                  Full Rooms: {roomTypeCounts.full}
                 </div>
               </>
             )}

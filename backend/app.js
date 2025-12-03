@@ -1156,7 +1156,7 @@ app.get('/api/recent-activities', async (req, res) => {
   try {
     const activities = await Booking.find()
       .sort({ updatedAt: -1, paymentDate: -1 })
-      .limit(10)
+      .limit(5)
       .lean();
 
     const formattedActivities = activities.map(a => ({
@@ -1300,37 +1300,81 @@ app.get('/api/revenue', async (req, res) => {
 
 app.get('/api/bookings/summary', async (req, res) => {
   try {
-    const bookings = await Booking.find().lean();
+    const bookings = await Booking.find({
+      bookingStatus: { $in: ['confirmed', 'checked_in', 'completed'] }
+    }).lean();
+    
     const now = new Date();
+    
+    // Get current month boundaries
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    
+    // Start of current month
+    const startOfMonth = new Date(currentYear, currentMonth, 1);
+    
+    // End of current month
+    const endOfMonth = new Date(currentYear, currentMonth + 1, 0);
+    endOfMonth.setHours(23, 59, 59, 999);
+    
+    // Get start of current week (Monday)
+    const startOfWeek = new Date(now);
+    const day = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const diffToMonday = day === 0 ? -6 : 1 - day; // If Sunday, go back 6 days
+    startOfWeek.setDate(now.getDate() + diffToMonday);
+    startOfWeek.setHours(0, 0, 0, 0);
+    
+    // Get end of current week (Sunday)
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
 
     let total = 0;
     let thisMonth = 0;
     let thisWeek = 0;
 
     bookings.forEach((b) => {
-      if (!b.checkIn) return;
-      const checkInDate = new Date(b.checkIn);
-      if (isNaN(checkInDate)) return;
+      // Use bookedAt date for monthly/weekly counts (when booking was made)
+      // Use checkIn date for total counts
+      const bookingDate = b.bookedAt || b.createdAt || b.checkIn;
+      
+      if (!bookingDate) return;
+      
+      const bookingDateObj = new Date(bookingDate);
+      if (isNaN(bookingDateObj)) return;
 
       total++;
 
-      if (
-        checkInDate.getMonth() === now.getMonth() &&
-        checkInDate.getFullYear() === now.getFullYear()
-      ) {
+      // Check if booking was MADE in current month (not when check-in is)
+      if (bookingDateObj >= startOfMonth && bookingDateObj <= endOfMonth) {
         thisMonth++;
       }
 
-      const diffDays = (now - checkInDate) / (1000 * 60 * 60 * 24);
-      if (diffDays >= 0 && diffDays <= 7) {
+      // Check if booking was MADE in current week
+      if (bookingDateObj >= startOfWeek && bookingDateObj <= endOfWeek) {
         thisWeek++;
       }
     });
 
-    res.json({ total, thisMonth, thisWeek });
+    res.json({ 
+      success: true,
+      total, 
+      thisMonth, 
+      thisWeek,
+      dateRange: {
+        weekStart: startOfWeek.toISOString(),
+        weekEnd: endOfWeek.toISOString(),
+        monthStart: startOfMonth.toISOString(),
+        monthEnd: endOfMonth.toISOString(),
+        currentDate: now.toISOString()
+      }
+    });
   } catch (err) {
     console.error('Error in /api/bookings/summary:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
   }
 });
 
@@ -1421,8 +1465,10 @@ app.get('/api/traveler/:email/bookings', async (req, res) => {
   }
 });
 
+// GET /api/rooms/count - Get total rooms with accurate booked counts
 app.get('/api/rooms/count', async (req, res) => {
   try {
+    // 1) TOTAL + AVAILABLE from RoomData (verified/approved rooms only)
     const totalRooms = await RoomData.countDocuments({
       $or: [{ status: /verified/i }, { status: /approved/i }]
     });
@@ -1432,24 +1478,33 @@ app.get('/api/rooms/count', async (req, res) => {
       booking: { $ne: true }
     });
 
-    const bookedRooms = totalRooms - availableRooms;
+    // 2) BOOKED ROOMS FROM BOOKINGS COLLECTION (NOT total - available)
+    //    Here we’re counting all confirmed bookings.
+    //    Adjust filter if you only want paymentStatus completed, etc.
+    const totalBookedRooms = await Booking.countDocuments({
+      bookingStatus: /confirmed/i
+    });
 
+    // 3) This month & this week booked (also from Booking)
     const now = new Date();
+
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfWeek = new Date(now);
+    // Monday as start of week
     startOfWeek.setDate(now.getDate() - now.getDay() + 1);
     startOfWeek.setHours(0, 0, 0, 0);
 
-    const thisMonthBooked = await RoomData.countDocuments({
-      booking: true,
-      updatedAt: { $gte: startOfMonth }
+    const thisMonthBooked = await Booking.countDocuments({
+      bookingStatus: /confirmed/i,
+      checkIn: { $gte: startOfMonth }
     });
 
-    const thisWeekBooked = await RoomData.countDocuments({
-      booking: true,
-      updatedAt: { $gte: startOfWeek }
+    const thisWeekBooked = await Booking.countDocuments({
+      bookingStatus: /confirmed/i,
+      checkIn: { $gte: startOfWeek }
     });
 
+    // 4) Group by status from RoomData (same as before)
     const roomsByStatus = await RoomData.aggregate([
       {
         $group: {
@@ -1459,6 +1514,7 @@ app.get('/api/rooms/count', async (req, res) => {
       }
     ]);
 
+    // 5) Popular room types (Shared / Full / Any, etc.)
     const popularRoomTypes = await RoomData.aggregate([
       {
         $match: {
@@ -1476,12 +1532,13 @@ app.get('/api/rooms/count', async (req, res) => {
       { $limit: 5 }
     ]);
 
+    // 6) Final response
     res.json({
       success: true,
       counts: {
         total: totalRooms,
         available: availableRooms,
-        booked: bookedRooms,
+        booked: totalBookedRooms,      // ✅ NOW FROM BOOKINGS
         thisMonthBooked,
         thisWeekBooked
       },
@@ -1499,6 +1556,7 @@ app.get('/api/rooms/count', async (req, res) => {
     });
   }
 });
+
 
 app.get('/api/user-counts', async (req, res) => {
   try {
