@@ -19,6 +19,10 @@ const adminController = require('./controllers/adminController');
 
 const { Traveler, Host } = require('./model/usermodel');
 const RoomData = require('./model/Room');
+// At the top of app.js with other requires
+const { MongoClient } = require('mongodb');
+const { GoogleGenAI } = require('@google/genai');
+
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -1805,6 +1809,199 @@ app.get('/api/trends', async (req, res) => {
     });
   }
 });
+
+// AI Chat bot functions
+// ---- Google Gemini AI + Admin_Traveler (RoomDataTraveler) integration ----
+
+// Initialize Google Gemini AI
+if (!process.env.GOOGLE_API_KEY) {
+  console.warn('GOOGLE_API_KEY not provided — AI features will be unavailable.');
+}
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GOOGLE_API_KEY || '',
+});
+
+// Global chat instance — initialized once and reused for all requests
+let geminiChat = null;
+
+function initializeGeminiChat(inventory) {
+  const systemPrompt = `You are a specialized hotel booking assistant for a specific hotel chain/knowledge base ONLY.
+Your ONLY function is to help users find and book hotels from the provided inventory below.
+You MUST ONLY recommend hotels that exist in the inventory provided.
+You MUST NOT provide general chatbot responses, general travel advice, or information outside the provided inventory.
+You MUST NOT make up or suggest hotels that are NOT in the inventory.
+
+REQUIRED INVENTORY - These are the ONLY hotels you can recommend:
+${inventory.length ? JSON.stringify(inventory, null, 2) : 'NO INVENTORY PROVIDED'}
+
+STRICT RESPONSE RULES:
+1. If the user's query matches hotels in the inventory, return ONLY those matching hotels.
+2. If the user's query does NOT match any hotels in the inventory, respond with an empty hotels array and explain that no matching hotels are available in your system.
+3. NEVER suggest hotels outside the provided inventory.
+4. NEVER provide general travel advice or act like a general chatbot.
+5. Always respond with a valid JSON object containing EXACTLY these fields:
+   - reply: A brief explanation of results or why no matches were found
+   - hotels: An array of ONLY the matching hotel objects from the inventory with fields
+
+If inventory is empty or no matches exist, return empty hotels array with explanation in reply.
+Do NOT include any other fields or keys in your JSON response.`;
+
+  geminiChat = ai.chats.create({
+    model: 'gemini-2.5-flash',
+    config: {
+      systemInstruction: systemPrompt,
+    },
+    history: [],
+  });
+
+  console.log('[DEBUG] Gemini chat instance initialized with inventory of', inventory.length, 'items');
+}
+
+// ---- Native MongoClient for Admin_Traveler.RoomDataTraveler (for AI inventory) ----
+const mongo = new MongoClient(ADMIN_TRAVELER_URI, {}); // use your existing ADMIN_TRAVELER_URI
+let roomsCollection = null; // points to RoomDataTraveler
+
+async function connectMongoForGemini() {
+  if (!ADMIN_TRAVELER_URI) {
+    console.warn('ADMIN_TRAVELER_URI not provided — Gemini DB features disabled.');
+    return;
+  }
+
+  await mongo.connect();
+  const db = mongo.db('Admin_Traveler');
+  roomsCollection = db.collection('RoomDataTraveler');
+  console.log('Connected to MongoDB (Admin_Traveler) for Gemini inventory');
+
+  // Initialize Gemini chat with inventory
+  try {
+    const docs = await roomsCollection.find().limit(50).toArray().catch(() => []);
+    const inventory = (docs || []).map(d => ({
+      id: d._id?.toString?.() || d.id || null,
+      name: d.name || d.hotelName || d.roomName || null,
+      price: d.price || d.rate || d.pricePerNight || null,
+      rating: d.rating || d.reviewScore || null,
+      location: d.location || d.city || d.address || null,
+      description: d.description || d.details || d.roomDescription || null,
+      bedrrooms: d.bedrooms || d.numBeds || null,
+      beds: d.beds || d.bedCount || null,
+      availability: d.availability || d.isAvailable || null,
+      propertyType: d.propertyType || d.type || null,
+      roomLocation: d.roomLocation || d.area || null,
+      roomSize: d.roomSize || d.sizeSqFt || null,
+    }));
+    initializeGeminiChat(inventory);
+    console.log('[DEBUG] Loaded', inventory.length, 'hotels/rooms into Gemini context');
+  } catch (e) {
+    console.warn('Failed to initialize Gemini with inventory:', e.message);
+    initializeGeminiChat([]);
+  }
+}
+
+connectMongoForGemini().catch(err => {
+  console.warn('Mongo connection for Gemini failed (continuing without AI inventory):', err.message);
+});
+
+// ----- /api/ai-chat : Google Gemini API powered chat -----
+app.post('/api/ai-chat', async (req, res) => {
+  try {
+    console.log('[DEBUG] /api/ai-chat endpoint called');
+    const { message } = req.body || {};
+    console.log('[DEBUG] message:', message);
+    const query = (message || '').trim();
+    if (!query) return res.json({ reply: 'Please tell me where to search or what you need.' });
+
+    // If Google key available, use Gemini API
+    if (process.env.GOOGLE_API_KEY) {
+      console.log('[DEBUG] Google key present, attempting Gemini API...');
+      try {
+        console.log('[DEBUG] Calling getHotelsFromGemini...');
+        const result = await getHotelsFromGemini(query);
+
+        const reply = result.reply || `Found hotels matching "${query}".`;
+        let hotels = result.hotels || [];
+
+        // If no hotels from Gemini, try to fetch from DB (RoomDataTraveler)
+        if ((!hotels || hotels.length === 0) && roomsCollection) {
+          try {
+            const docs = await roomsCollection
+              .find({ $text: { $search: query } })
+              .limit(20)
+              .toArray()
+              .catch(() => []);
+
+            if (docs && docs.length) {
+              hotels = docs.map(d => ({
+                id: d._id?.toString?.() || d.id || null,
+                name: d.name || d.hotelName || d.roomName || null,
+                price: d.price || d.rate || d.pricePerNight || null,
+                rating: d.rating || d.reviewScore || null,
+                location: d.location || d.city || d.address || null,
+                description: d.description || d.details || d.roomDescription || null,
+              }));
+            }
+          } catch (e) {
+            console.warn('DB text search failed', e.message);
+          }
+        }
+
+        // If still no hotels, return empty list (mock disabled)
+        return res.json({ reply, hotels });
+      } catch (err) {
+        console.error('Gemini API error', err);
+
+        if (err?.message?.includes('401') || err?.message?.includes('403')) {
+          return res.status(403).json({ error: 'Google Gemini auth error. Check GOOGLE_API_KEY/permissions.' });
+        }
+        if (err?.message?.includes('429')) {
+          return res.status(429).json({ error: 'Google quota exceeded.' });
+        }
+
+        return res.json({
+          reply: 'AI service temporarily unavailable — returning sample hotels.',
+          hotels: mockHotelsDisabled(query),
+        });
+      }
+    }
+
+    // Fallback: no GOOGLE_API_KEY
+    if (roomsCollection) {
+      try {
+        const docs = await roomsCollection
+          .find({ $text: { $search: query } })
+          .limit(10)
+          .toArray()
+          .catch(() => []);
+
+        if (docs && docs.length) {
+          const hotels = docs.map(d => ({
+            id: d._id?.toString?.() || d.id || null,
+            name: d.name || d.hotelName || d.roomName || null,
+            price: d.price || d.rate || d.pricePerNight || null,
+            rating: d.rating || d.reviewScore || null,
+            location: d.location || d.city || d.address || null,
+            description: d.description || d.details || d.roomDescription || null,
+          }));
+          return res.json({
+            reply: `Found ${hotels.length} hotels for "${query}" (database search).`,
+            hotels,
+          });
+        }
+      } catch (e) {
+        console.warn('DB text search failed', e.message);
+      }
+    }
+
+    return res.json({
+      reply: 'Returning sample hotels.',
+      hotels: mockHotelsDisabled(query),
+    });
+  } catch (err) {
+    console.error('AI chat handler error', err);
+    return res.status(500).json({ error: err.message || 'server error' });
+  }
+});
+
 
 app.delete('/api/users/:id', adminController.deleteUser);
 
