@@ -1,29 +1,28 @@
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
-const path = require('path'); //j
+const path = require('path');
 const { GridFSBucket } = require('mongodb');
-const rateLimit = require('express-rate-limit'); //j
+const rateLimit = require('express-rate-limit');
 const passport = require('passport');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const cors = require('cors');
-const nodemailer = require('nodemailer');//j
+const nodemailer = require('nodemailer');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const multer = require('multer');//j
-const mkdirp = require('mkdirp');//j
-const hostController = require('./controllers/hostController');//j
-const adminController = require('./controllers/adminController');//j
+const multer = require('multer');
+const mkdirp = require('mkdirp');
+const qrcode = require('qrcode');
+const hostController = require('./controllers/hostController');
+const adminController = require('./controllers/adminController');
 
-// Models
 const { Traveler, Host } = require('./model/usermodel');
-const RoomData = require('./model/Room');//j
+const RoomData = require('./model/Room');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-//j
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -37,7 +36,6 @@ app.use('/api', limiter);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// // Uploads folder
 const uploadsDir = path.join(__dirname, 'public/uploads');
 mkdirp.sync(uploadsDir);
 const upload = multer({
@@ -47,24 +45,15 @@ const upload = multer({
   }),
 });
 
-// Main DB (Users, Sessions, Auth)
-
-
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/loginDataBase';
 const HOST_ADMIN_URI = process.env.HOST_ADMIN_URI || 'mongodb://localhost:27017/Host_Admin';
 const ADMIN_TRAVELER_URI = process.env.ADMIN_TRAVELER_URI || 'mongodb://localhost:27017/Admin_Traveler';
 const PAYMENT_DB_URI = process.env.PAYMENT_DB_URI || 'mongodb://localhost:27017/payment';
 
-
-//j
-// ==================== DATABASE CONNECTIONS ====================
-
-// Main DB (Users, Sessions, Auth)
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/yourdb')
+mongoose.connect(MONGODB_URI)
   .then(() => console.log('Main MongoDB connected'))
   .catch(err => console.error('Main DB connection error:', err));
 
-//j
 const loginDataSchema = new mongoose.Schema({
   name: String,
   email: String,
@@ -72,17 +61,13 @@ const loginDataSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 const LoginData = mongoose.model('LoginData', loginDataSchema, 'LoginData');
-//j
 
-// Host/Admin DB (Listings, GridFS)
-const hostAdminUri = process.env.HOST_ADMIN_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/yourdb';
-global.hostAdminConnection = mongoose.createConnection(hostAdminUri, {
+global.hostAdminConnection = mongoose.createConnection(HOST_ADMIN_URI, {
   retryWrites: true,
   w: 'majority'
 });
 
-const paymentDBUri = process.env.PAYMENT_DB_URI || 'mongodb://localhost:27017/payment';
-const paymentConnection = mongoose.createConnection(paymentDBUri, {
+const paymentConnection = mongoose.createConnection(PAYMENT_DB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
   retryWrites: true,
@@ -97,19 +82,16 @@ paymentConnection.on('error', (err) => {
   console.error('Payment/Booking DB connection error:', err.message);
 });
 
-// Booking Model using payment database
 const Booking = paymentConnection.model('Booking', require('./model/Booking').schema);
+
 global.hostAdminConnection.on('connected', () => {
   console.log('Connected to Host_Admin database');
   
-  // Initialize GridFS
   if (!global.gfsBucket) {
     global.gfsBucket = new GridFSBucket(global.hostAdminConnection.db, { bucketName: 'images' });
     console.log('GridFS bucket initialized');
   }
 
-  // Initialize host models
-  const hostController = require('./controllers/hostController');
   try {
     hostController.initializeHostModels();
     console.log('Host models initialized');
@@ -122,75 +104,51 @@ global.hostAdminConnection.on('error', (err) => {
   console.error('Host_Admin DB connection error:', err.message);
 });
 
-//j
 const hostAdminConnection = mongoose.createConnection(HOST_ADMIN_URI, { useNewUrlParser: true, useUnifiedTopology: true });
 const travelerConnection = mongoose.createConnection(ADMIN_TRAVELER_URI, { useNewUrlParser: true, useUnifiedTopology: true });
-// const paymentConnection = mongoose.createConnection(PAYMENT_DB_URI, { useNewUrlParser: true, useUnifiedTopology: true });
 
 hostAdminConnection.once('open', () => console.log('Connected to Host_Admin'));
 travelerConnection.once('open', () => console.log('Connected to Admin_Traveler'));
 paymentConnection.once('open', () => console.log('Connected to payment'));
 
-// // GridFS setup for Host_Admin DB
 let gfsBucket;
 hostAdminConnection.once('open', () => {
   gfsBucket = new GridFSBucket(hostAdminConnection.db, { bucketName: 'images' });
   console.log('GridFS Bucket initialized');
 });
 
-// const RoomData = hostAdminConnection.model('RoomData', new mongoose.Schema({}, { collection: 'RoomData' }));
-
-// ✅ ---- ROUTES ----
-
-
-// const createBookingModel = require('./model/booking');
-// const Booking = createBookingModel(paymentConnection);
-
-//j
-
-
-
-// ==================== MIDDLEWARE ====================
-
 app.use(cors({ 
   origin: process.env.FRONTEND_URL || 'http://localhost:3000', 
   credentials: true 
 }));
-app.use(express.json());
 
-// Session with MongoStore
 app.use(session({
   secret: process.env.SESSION_SECRET || 'secret123',
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/yourdb',
+    mongoUrl: MONGODB_URI,
     collectionName: 'sessions'
   }),
   cookie: {
-    maxAge: 1000 * 60 * 60 * 24, // 1 day
+    maxAge: 1000 * 60 * 60 * 24,
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true
   }
 }));
 
-// Passport
 app.use(passport.initialize());
 app.use(passport.session());
 require('./config/passport')(passport);
 
-// Routes
 const authRoutes = require('./routes/authRoutes');
 const hostRoutes = require('./routes/hostRoutes');
 app.use('/auth', authRoutes);
 app.use('/api', hostRoutes);
 
-// ==================== OTP & EMAIL SYSTEM ====================
-
 const otpStore = {};
 const verifiedEmails = new Set();
 
-// Email Test: Config Check
 app.get('/test-email-config', async (req, res) => {
   try {
     const emailUser = process.env.EMAIL_USER || process.env.EMAIL;
@@ -212,7 +170,6 @@ app.get('/test-email-config', async (req, res) => {
   }
 });
 
-// Email Test: Send Test OTP
 app.post('/simple-email-test', async (req, res) => {
   try {
     const { toEmail } = req.body;
@@ -244,13 +201,12 @@ app.post('/simple-email-test', async (req, res) => {
   }
 });
 
-// Send OTP
 app.post('/send-otp', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ message: 'Email required' });
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore[email] = { otp, expires: Date.now() + 10 * 60 * 1000 }; // 10 min
+  otpStore[email] = { otp, expires: Date.now() + 10 * 60 * 1000 };
 
   const emailUser = process.env.EMAIL_USER || process.env.EMAIL;
   const hasEmailCreds = Boolean(emailUser && process.env.EMAIL_PASS);
@@ -270,7 +226,6 @@ app.post('/send-otp', async (req, res) => {
       from: emailUser,
       to: email,
       subject: '🔐 Your ShelterSeek Verification Code',
-    
       html: `
         <div style="
             max-width: 480px;
@@ -283,7 +238,6 @@ app.post('/send-otp', async (req, res) => {
             color: #333;
             line-height: 1.6;
         ">
-    
             <h2 style="
                 text-align: center;
                 color: #d72d6e;
@@ -292,12 +246,10 @@ app.post('/send-otp', async (req, res) => {
             ">
                 🔐 ShelterSeek Verification
             </h2>
-    
             <p style="font-size: 15px; margin-bottom: 18px;">
                 Hello Traveler 👋,<br><br>
                 Use the following One-Time Password (OTP) to verify your account:
             </p>
-    
             <div style="
                 text-align: center;
                 background: #ffe8f1;
@@ -319,22 +271,18 @@ app.post('/send-otp', async (req, res) => {
                     ⏳ Valid for 10 minutes
                 </p>
             </div>
-    
             <p style="font-size: 14px; color:#444;">
                 ⚠️ Please keep this code confidential.<br>
                 Do not share it with anyone for your security.
             </p>
-    
             <p style="font-size: 13px; color:#777; margin-top: 25px; text-align: center;">
                 If you did not request this verification code, you may safely ignore this email ❌.
                 <br><br>
                 — Team ShelterSeek 💖
             </p>
-    
         </div>
       `
     });
-    
     
     res.json({ success: true, message: 'OTP sent successfully!' });
   } catch (error) {
@@ -345,7 +293,6 @@ app.post('/send-otp', async (req, res) => {
   }
 });
 
-// Verify OTP
 app.post('/verify-otp', (req, res) => {
   const { email, otp } = req.body;
   const data = otpStore[email];
@@ -364,9 +311,6 @@ app.post('/verify-otp', (req, res) => {
   res.status(400).json({ success: false, message: 'Invalid OTP' });
 });
 
-// ==================== AUTH ENDPOINTS ====================
-
-// Signup
 app.post('/signup', async (req, res) => {
   try {
     const { name, email, password, accountType } = req.body;
@@ -404,7 +348,6 @@ app.post('/signup', async (req, res) => {
   }
 });
 
-// Login
 app.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -438,7 +381,6 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// Profile (Authenticated)
 app.get('/profile', (req, res) => {
   if (!req.isAuthenticated()) return res.status(401).json({ success: false, message: 'Not authenticated' });
   res.json({
@@ -447,14 +389,11 @@ app.get('/profile', (req, res) => {
   });
 });
 
-// Logout
 app.post('/logout', (req, res) => {
   req.logout(() => {});
   req.session.destroy();
   res.json({ success: true, message: 'Logged out' });
 });
-
-// ==================== JWT MIDDLEWARE ====================
 
 const authenticateToken = async (req, res, next) => {
   const token = req.headers['authorization']?.split(' ')[1];
@@ -471,9 +410,6 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-// ==================== TRAVELER FEATURES ====================
-
-// Liked Rooms
 app.post('/api/traveler/liked-rooms', authenticateToken, async (req, res) => {
   if (req.user.accountType !== 'traveller') return res.status(403).json({ success: false, message: 'Traveler only' });
 
@@ -500,7 +436,6 @@ app.get('/api/traveler/liked-rooms', authenticateToken, async (req, res) => {
   res.json({ success: true, likedRooms: traveler?.likedRooms || [] });
 });
 
-// Viewed Rooms (History)
 app.post('/api/traveler/viewed-rooms', authenticateToken, async (req, res) => {
   if (req.user.accountType !== 'traveller') return res.status(403).json({ success: false, message: 'Traveler only' });
   const { roomId } = req.body;
@@ -522,7 +457,26 @@ app.get('/api/traveler/viewed-rooms', authenticateToken, async (req, res) => {
   res.json({ success: true, viewedRooms: traveler?.viewedRooms || [] });
 });
 
-// ==================== PASSWORD RESET ====================
+app.post('/api/traveler/clear-history', authenticateToken, async (req, res) => {
+  if (req.user.accountType !== 'traveller') {
+    return res.status(403).json({ success: false, message: 'Traveler only' });
+  }
+  
+  try {
+    const traveler = await Traveler.findById(req.user._id);
+    if (!traveler) {
+      return res.status(404).json({ success: false, message: 'Traveler not found' });
+    }
+    
+    traveler.viewedRooms = [];
+    await traveler.save();
+    
+    res.json({ success: true, message: 'History cleared successfully' });
+  } catch (error) {
+    console.error('Error clearing history:', error);
+    res.status(500).json({ success: false, message: 'Failed to clear history' });
+  }
+});
 
 app.post('/forgot-password', async (req, res) => {
   try {
@@ -589,11 +543,8 @@ app.post('/reset-password', async (req, res) => {
   }
 });
 
-// ==================== ROOMS & BOOKINGS ====================
-
 app.get('/api/rooms', async (req, res) => {
   try {
-    // Extract user from token if provided
     let userId = null;
     const token = req.headers['authorization']?.split(' ')[1];
     
@@ -605,38 +556,33 @@ app.get('/api/rooms', async (req, res) => {
           userId = user._id.toString();
         }
       } catch (err) {
-        // Invalid token, treat as guest
       }
     }
 
-    // Build query based on user status
     let query = {
       $or: [{ status: /verified/i }, { status: /approved/i }]
     };
 
     if (!userId) {
-      // Guest user: only see non-booked rooms
       query.booking = { $ne: true };
     } else {
-      // Logged-in user: see non-booked rooms OR rooms booked by themselves
       query = {
         $and: [
           { $or: [{ status: /verified/i }, { status: /approved/i }] },
           {
             $or: [
-              { booking: { $ne: true } },  // Available rooms
-              { bookedBy: userId }          // OR rooms booked by this user
+              { booking: { $ne: true } },
+              { bookedBy: userId }
             ]
           }
         ]
       };
       
-      // If user is a host, show all their rooms regardless of booking status
       const user = await Traveler.findById(userId) || await Host.findById(userId);
       if (user && user.accountType === 'host') {
         query = {
           $or: [
-            { email: user.email },  // Host's own rooms
+            { email: user.email },
             {
               $and: [
                 { $or: [{ status: /verified/i }, { status: /approved/i }] },
@@ -655,7 +601,6 @@ app.get('/api/rooms', async (req, res) => {
 
     const rooms = await RoomData.find(query).lean();
 
-    // Process each room to format the data properly
     const processed = rooms.map(room => {
       const images = room.images?.map(img => {
         if (typeof img === 'object' && img.$oid) {
@@ -722,9 +667,28 @@ app.get('/api/rooms', async (req, res) => {
   }
 });
 
+function generateDateRange(startDate, endDate) {
+  const dates = [];
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const current = new Date(start);
+  
+  while (current <= end) {
+    dates.push(new Date(current).toISOString().split('T')[0]);
+    current.setDate(current.getDate() + 1);
+  }
+  
+  return dates;
+}
 
-// Create Booking
-// In app.js, replace the /api/bookings endpoint with this corrected version:
+function formatDate(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+}
 
 app.post('/api/bookings', authenticateToken, async (req, res) => {
   try {
@@ -745,13 +709,11 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
-    // Fetch room details
     const room = await RoomData.findById(roomId);
     if (!room) {
       return res.status(404).json({ success: false, message: 'Room not found' });
     }
 
-    // Check capacity
     if (guests > room.capacity) {
       return res.status(400).json({ 
         success: false, 
@@ -759,7 +721,6 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
       });
     }
 
-    // Check if room is already booked for these dates
     const existingBooking = await Booking.findOne({
       roomId: roomId,
       $or: [
@@ -775,11 +736,9 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Room already booked for selected dates' });
     }
 
-    // Generate transaction ID if not provided
     const transactionId = paymentDetails.transactionId || 
       `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
-    // Create booking record in payment database
     const booking = new Booking({
       travelerId: req.user._id,
       travelerName: req.user.name,
@@ -817,14 +776,12 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
 
     await booking.save();
 
-    // Update room with booking status and unavailable dates
     await RoomData.findByIdAndUpdate(roomId, {
       booking: true,
       bookedBy: req.user._id,
       $addToSet: { unavailableDates: { $each: generateDateRange(checkIn, checkOut) } }
     });
 
-    // Update user's booking history (for travelers)
     if (req.user.accountType === 'traveller') {
       try {
         const traveler = await Traveler.findById(req.user._id);
@@ -862,11 +819,9 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
         }
       } catch (err) {
         console.error('Error updating traveler bookings:', err);
-        // Don't fail the whole request if this fails
       }
     }
 
-    // Update host's booking history
     if (room.email) {
       try {
         const host = await Host.findOne({ email: room.email });
@@ -903,11 +858,9 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
         }
       } catch (err) {
         console.error('Error updating host bookings:', err);
-        // Don't fail the whole request if this fails
       }
     }
 
-    // Send confirmation email (optional)
     try {
       const emailUser = process.env.EMAIL_USER || process.env.EMAIL;
       const hasEmailCreds = Boolean(emailUser && process.env.EMAIL_PASS);
@@ -942,7 +895,6 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
                   ">
                       Hello Traveler! 🏡
                   </h1>
-
                   <h2 style="
                       text-align: center;
                       color: #d72d6e;
@@ -951,7 +903,6 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
                   ">
                       🎉 Your Booking is Confirmed!
                   </h2>
-
                   <div style="
                       background: #ffe8f1;
                       border-left: 5px solid #d72d6e;
@@ -968,12 +919,10 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
                       </p>
                       <p style="margin: 8px 0;"><strong>🔖 Transaction ID:</strong> ${transactionId}</p>
                   </div>
-
                   <p style="font-size: 15px; color:#555; text-align:center;">
                       Thank you for choosing <strong>ShelterSeek</strong> for your stay! 💖  
                       <br>We wish you a wonderful and memorable experience 😊
                   </p>
-
                   <div style="text-align:center; margin-top: 18px;">
                       <a href="http://localhost:3000/BookedHistory" style="
                           padding: 10px 18px;
@@ -985,19 +934,16 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
                           font-weight: 600;
                       ">🔍 View Booking Details</a>
                   </div>
-
                   <p style="text-align:center; margin-top:25px; color:#888; font-size:13px;">
                       Need help? Contact us anytime at  
                       <a style="color:#d72d6e;" href="mailto:shelterseekrooms@gmail.com">shelterseekrooms@gmail.com</a> 📩
                   </p>
             </div>
             `
-
         });
       }
     } catch (emailErr) {
       console.error('Failed to send confirmation email:', emailErr);
-      // Don't fail the whole request if email fails
     }
 
     res.json({ 
@@ -1025,38 +971,12 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
   }
 });
 
-// Helper functions - add these near the top of your app.js file
-function generateDateRange(startDate, endDate) {
-  const dates = [];
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const current = new Date(start);
-  
-  while (current <= end) {
-    dates.push(new Date(current).toISOString().split('T')[0]);
-    current.setDate(current.getDate() + 1);
-  }
-  
-  return dates;
-}
-
-function formatDate(dateString) {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', { 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
-}
-
-// Get traveler's booking history
 app.get('/api/bookings/history', authenticateToken, async (req, res) => {
   try {
     if (req.user.accountType !== 'traveller') {
       return res.status(403).json({ success: false, message: 'Only travelers can access booking history' });
     }
 
-    // Fetch from bookings collection
     const bookings = await Booking.find({ travelerId: req.user._id })
       .sort({ bookedAt: -1 })
       .lean();
@@ -1072,7 +992,6 @@ app.get('/api/bookings/history', authenticateToken, async (req, res) => {
   }
 });
 
-// Get host's bookings
 app.get('/api/bookings/host', authenticateToken, async (req, res) => {
   try {
     if (req.user.accountType !== 'host') {
@@ -1094,28 +1013,100 @@ app.get('/api/bookings/host', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/traveler/clear-history', authenticateToken, async (req, res) => {
-  if (req.user.accountType !== 'traveller') {
-    return res.status(403).json({ success: false, message: 'Traveler only' });
-  }
-  
+app.get('/api/host/analytics', authenticateToken, async (req, res) => {
   try {
-    const traveler = await Traveler.findById(req.user._id);
-    if (!traveler) {
-      return res.status(404).json({ success: false, message: 'Traveler not found' });
+    if (req.user.accountType !== 'host') {
+      return res.status(403).json({ success: false, message: 'Only hosts can access host analytics' });
     }
-    
-    traveler.viewedRooms = [];
-    await traveler.save();
-    
-    res.json({ success: true, message: 'History cleared successfully' });
+
+    const hostEmail = req.user.email;
+
+    const bookings = await Booking.find({
+      hostEmail: hostEmail,
+      paymentStatus: 'completed',
+      bookingStatus: { $in: ['confirmed', 'completed', 'checked_out'] }
+    }).sort({ bookedAt: -1 }).lean();
+
+    const currentDate = new Date();
+    const monthlyData = [];
+
+    for (let i = 0; i < 12; i++) {
+      const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+      const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() - i + 1, 0, 23, 59, 59);
+
+      const monthBookings = bookings.filter(booking => {
+        const bookingDate = new Date(booking.bookedAt);
+        return bookingDate >= monthStart && bookingDate <= monthEnd;
+      });
+
+      const monthEarnings = monthBookings.reduce((sum, booking) => sum + booking.totalCost, 0);
+
+      monthlyData.unshift({
+        month: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        bookings: monthBookings.length,
+        earnings: monthEarnings
+      });
+    }
+
+    const totalBookings = bookings.length;
+    const totalEarnings = bookings.reduce((sum, booking) => sum + booking.totalCost, 0);
+    const avgEarningsPerBooking = totalBookings > 0 ? totalEarnings / totalBookings : 0;
+
+    res.json({
+      success: true,
+      analytics: {
+        totalBookings,
+        totalEarnings,
+        avgEarningsPerBooking,
+        monthlyData
+      }
+    });
+
   } catch (error) {
-    console.error('Error clearing history:', error);
-    res.status(500).json({ success: false, message: 'Failed to clear history' });
+    console.error('Error fetching host analytics:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch host analytics' });
   }
 });
 
-// Update Booking Status
+app.get('/api/listings/:listingId/qr', authenticateToken, async (req, res) => {
+  try {
+    const { listingId } = req.params;
+    console.log('QR Code generation requested for listingId:', listingId);
+    console.log('User:', req.user.email, 'Account type:', req.user.accountType);
+
+    const listing = await RoomData.findById(listingId);
+    console.log('Listing found:', !!listing);
+    if (!listing) {
+      console.log('Listing not found for ID:', listingId);
+      return res.status(404).json({ success: false, message: 'Listing not found' });
+    }
+
+    console.log('Listing email:', listing.email, 'User email:', req.user.email);
+
+    if (req.user.accountType === 'host' && listing.email !== req.user.email) {
+      console.log('Access denied - listing belongs to different host');
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const listingUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/room/${listingId}`;
+    console.log('Generating QR code for URL:', listingUrl);
+
+    const qrCodeDataURL = await qrcode.toDataURL(listingUrl);
+    console.log('QR code generated successfully');
+
+    res.json({
+      success: true,
+      qrCode: qrCodeDataURL,
+      listingUrl,
+      listingTitle: listing.title
+    });
+
+  } catch (error) {
+    console.error('Error generating QR code:', error);
+    res.status(500).json({ success: false, message: 'Failed to generate QR code' });
+  }
+});
+
 app.put('/api/rooms/:roomId/book', authenticateToken, async (req, res) => {
   const { booking = true } = req.body;
   const room = await RoomData.findById(req.params.roomId);
@@ -1126,8 +1117,6 @@ app.put('/api/rooms/:roomId/book', authenticateToken, async (req, res) => {
 
   res.json({ success: true, message: `Room ${booking ? 'booked' : 'freed'}`, room: { _id: room._id, booking: room.booking } });
 });
-
-// ==================== DEBUG & HEALTH ====================
 
 app.get('/debug-env', (req, res) => {
   res.json({
@@ -1150,8 +1139,6 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-//j
-
 app.get('/api/new-customers', async (req, res) => {
   try {
     const customers = await LoginData.find({ accountType: 'traveller' }).lean();
@@ -1163,7 +1150,6 @@ app.get('/api/new-customers', async (req, res) => {
 
 app.get('/api/recent-activities', async (req, res) => {
   try {
-    // Fetch last 10 updated or recently paid bookings
     const activities = await Booking.find()
       .sort({ updatedAt: -1, paymentDate: -1 })
       .limit(10)
@@ -1192,7 +1178,6 @@ app.get('/api/revenue', async (req, res) => {
 
     console.log(`Found ${bookings.length} completed bookings for revenue calculation`);
 
-    // Debug: Log first booking to check structure
     if (bookings.length > 0) {
       console.log('Sample booking structure:', {
         id: bookings[0]._id,
@@ -1203,7 +1188,6 @@ app.get('/api/revenue', async (req, res) => {
       });
     }
 
-    // ✅ Use totalCost instead of amount (based on your booking schema)
     const validBookings = bookings.filter(b => {
       const cost = b.totalCost || b.amount;
       return !isNaN(Number(cost)) && Number(cost) > 0;
@@ -1220,12 +1204,10 @@ app.get('/api/revenue', async (req, res) => {
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth();
     
-    // Get the start of current month
     const startOfMonth = new Date(currentYear, currentMonth, 1);
     
-    // Get the start of current week (Monday)
     const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
+    startOfWeek.setDate(now.getDate() - now.getDay() + 1);
     startOfWeek.setHours(0, 0, 0, 0);
 
     const thisMonthRevenue = validBookings
@@ -1248,7 +1230,6 @@ app.get('/api/revenue', async (req, res) => {
         return sum + Number(cost);
       }, 0);
 
-    // Calculate daily revenue for last 7 days
     const dailyRevenue = {};
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -1272,7 +1253,6 @@ app.get('/api/revenue', async (req, res) => {
       dailyRevenue[dateStr] = dayRevenue;
     }
 
-    // Calculate monthly revenue for last 6 months
     const monthlyRevenue = {};
     for (let i = 5; i >= 0; i--) {
       const monthDate = new Date(currentYear, currentMonth - i, 1);
@@ -1314,7 +1294,6 @@ app.get('/api/revenue', async (req, res) => {
   }
 });
 
-
 app.get('/api/bookings/summary', async (req, res) => {
   try {
     const bookings = await Booking.find().lean();
@@ -1325,13 +1304,12 @@ app.get('/api/bookings/summary', async (req, res) => {
     let thisWeek = 0;
 
     bookings.forEach((b) => {
-      if (!b.checkIn) return; // skip invalid entries
+      if (!b.checkIn) return;
       const checkInDate = new Date(b.checkIn);
       if (isNaN(checkInDate)) return;
 
       total++;
 
-      // ✅ Compare month & year to avoid cross-year errors
       if (
         checkInDate.getMonth() === now.getMonth() &&
         checkInDate.getFullYear() === now.getFullYear()
@@ -1339,7 +1317,6 @@ app.get('/api/bookings/summary', async (req, res) => {
         thisMonth++;
       }
 
-      // ✅ Compare day difference for current week
       const diffDays = (now - checkInDate) / (1000 * 60 * 60 * 24);
       if (diffDays >= 0 && diffDays <= 7) {
         thisWeek++;
@@ -1352,30 +1329,23 @@ app.get('/api/bookings/summary', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-//j
+
 app.get('/api/bookings/summarys', async (req, res) => {
   try {
     const bookings = await Booking.find({}).lean();
 
     const summary = bookings.map((b) => {
-      // ✅ totalCost is your actual field
       const cost = Number(b.totalCost ?? 0);
 
       return {
-        // both ids so you can use whichever you want on frontend
         _id: b._id,
-        bookingId: b.bookingId || b._id,          // human-readable bookingId
-        userName: b.travelerName || 'Unknown',   // guest name
-        userEmail: b.travelerEmail || '',        // optional
+        bookingId: b.bookingId || b._id,
+        userName: b.travelerName || 'Unknown',
+        userEmail: b.travelerEmail || '',
         roomTitle: b.roomTitle || 'N/A',
-
         checkIn: b.checkIn || null,
         checkOut: b.checkOut || null,
-
-        // 👇 main one
         totalCost: cost,
-
-        // 👇 extra alias so old frontend using `booking.amount` still works
         amount: cost,
       };
     });
@@ -1394,7 +1364,6 @@ app.get('/api/bookings/summarys', async (req, res) => {
   }
 });
 
-// GET /api/traveler/:email/bookings - Get all bookings for a specific traveler
 app.get('/api/traveler/:email/bookings', async (req, res) => {
   try {
     const { email } = req.params;
@@ -1403,12 +1372,10 @@ app.get('/api/traveler/:email/bookings', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email is required' });
     }
 
-    // Find bookings for this traveler email
     const bookings = await Booking.find({ travelerEmail: email })
       .sort({ bookedAt: -1 })
       .lean();
 
-    // Get traveler details
     const traveler = await Traveler.findOne({ email }).lean();
 
     res.json({
@@ -1450,28 +1417,23 @@ app.get('/api/traveler/:email/bookings', async (req, res) => {
   }
 });
 
-// GET /api/rooms/count - Get total rooms and available rooms count
 app.get('/api/rooms/count', async (req, res) => {
   try {
-    // Get total rooms count (verified/approved rooms)
     const totalRooms = await RoomData.countDocuments({
       $or: [{ status: /verified/i }, { status: /approved/i }]
     });
 
-    // Get available rooms (not booked)
     const availableRooms = await RoomData.countDocuments({
       $or: [{ status: /verified/i }, { status: /approved/i }],
       booking: { $ne: true }
     });
 
-    // Get booked rooms count
     const bookedRooms = totalRooms - availableRooms;
 
-    // Get this month's booked rooms
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
+    startOfWeek.setDate(now.getDate() - now.getDay() + 1);
     startOfWeek.setHours(0, 0, 0, 0);
 
     const thisMonthBooked = await RoomData.countDocuments({
@@ -1484,7 +1446,6 @@ app.get('/api/rooms/count', async (req, res) => {
       updatedAt: { $gte: startOfWeek }
     });
 
-    // Get rooms by status
     const roomsByStatus = await RoomData.aggregate([
       {
         $group: {
@@ -1494,7 +1455,6 @@ app.get('/api/rooms/count', async (req, res) => {
       }
     ]);
 
-    // Get popular room types
     const popularRoomTypes = await RoomData.aggregate([
       {
         $match: {
@@ -1536,10 +1496,8 @@ app.get('/api/rooms/count', async (req, res) => {
   }
 });
 
-
 app.get('/api/user-counts', async (req, res) => {
   try {
-    // Count travelers and hosts separately by filtering by accountType
     const travelerCount = await Traveler.countDocuments({ accountType: 'traveller' });
     const hostCount = await Host.countDocuments({ accountType: 'host' });
     
@@ -1557,25 +1515,22 @@ app.get('/api/user-counts', async (req, res) => {
   }
 });
 
-//j
-
 app.get('/api/users', async (req, res) => {
   try {
-    const { accountType } = req.query; // 'host' or 'traveller'
+    const { accountType } = req.query;
 
     let filter = {};
     if (accountType) {
-      filter.accountType = accountType; // filter by type
+      filter.accountType = accountType;
     }
 
-    const users = await LoginData.find(filter).lean(); // or whatever your model name is
+    const users = await LoginData.find(filter).lean();
     res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
-
 
 app.get('/api/hosts', async (req, res) => {
   try {
@@ -1593,7 +1548,7 @@ app.get('/api/hosts', async (req, res) => {
       h.roomCount = countsMap[h.email] || 0;
     });
 
-    res.json(hosts); // ✅ send JSON for React
+    res.json(hosts);
   } catch (error) {
     console.error('Error fetching hosts:', error);
     res.status(500).json({ hosts: [], error: error.message });
@@ -1626,38 +1581,28 @@ app.get('/api/rooms/host/:email', async (req, res) => {
   }
 });
 
-// ==================== TRENDS ENDPOINTS ====================
-// ===================== TRENDING ROOMS (views + likes) =====================
-// ==================== ENHANCED TRENDS ENDPOINT ====================
-
 app.get('/api/trends', async (req, res) => {
   try {
     console.log('=== TRENDS ENDPOINT CALLED ===');
     
-    // Fetch all travelers with room interactions
     const travelers = await Traveler.find({}).lean();
     console.log(`Total travelers: ${travelers.length}`);
     
-    // Initialize room statistics
     const roomStats = {};
-    const roomDetails = {}; // To store room details
+    const roomDetails = {};
     
-    // Process each traveler
     let travelersWithData = 0;
     
     travelers.forEach((traveler) => {
       let hasData = false;
       
-      // Process viewed rooms
       if (traveler.viewedRooms && Array.isArray(traveler.viewedRooms)) {
         traveler.viewedRooms.forEach(view => {
           let roomId;
           
-          // Extract room ID from different data structures
           if (typeof view === 'string') {
             roomId = view;
           } else if (view && typeof view === 'object') {
-            // Try different possible field names
             roomId = view.roomId || view._id || view.id;
           }
           
@@ -1684,7 +1629,6 @@ app.get('/api/trends', async (req, res) => {
         });
       }
       
-      // Process liked rooms
       if (traveler.likedRooms && Array.isArray(traveler.likedRooms)) {
         traveler.likedRooms.forEach(roomId => {
           if (!roomId || typeof roomId !== 'string') {
@@ -1716,7 +1660,6 @@ app.get('/api/trends', async (req, res) => {
     console.log(`Travelers with room data: ${travelersWithData}`);
     console.log(`Unique rooms found: ${Object.keys(roomStats).length}`);
     
-    // Convert to array
     const trends = Object.values(roomStats).map(stat => ({
       roomId: stat.roomId,
       totalViews: stat.totalViews,
@@ -1727,10 +1670,8 @@ app.get('/api/trends', async (req, res) => {
         Math.round((stat.totalLikes / stat.totalViews) * 100) : 0
     }));
     
-    // Sort by total views (descending)
     trends.sort((a, b) => b.totalViews - a.totalViews);
     
-    // Fetch room details for the top rooms
     const topRoomIds = trends.slice(0, 50).map(t => t.roomId);
     
     try {
@@ -1744,7 +1685,6 @@ app.get('/api/trends', async (req, res) => {
         }).filter(id => id !== null) }
       }).select('title name email location price').lean();
       
-      // Map room details by ID
       const roomDetailsMap = {};
       rooms.forEach(room => {
         roomDetailsMap[room._id.toString()] = {
@@ -1755,7 +1695,6 @@ app.get('/api/trends', async (req, res) => {
         };
       });
       
-      // Add room details to trends
       const trendsWithDetails = trends.map(trend => ({
         ...trend,
         roomName: roomDetailsMap[trend.roomId]?.title || `Room ${trend.roomId.substring(0, 8)}...`,
@@ -1764,7 +1703,6 @@ app.get('/api/trends', async (req, res) => {
         price: roomDetailsMap[trend.roomId]?.price || 0
       }));
       
-      // Calculate summary
       const summary = {
         totalRooms: trends.length,
         totalViews: trends.reduce((sum, t) => sum + t.totalViews, 0),
@@ -1785,7 +1723,6 @@ app.get('/api/trends', async (req, res) => {
     } catch (roomError) {
       console.error('Error fetching room details:', roomError);
       
-      // Return trends without room details if room fetch fails
       const summary = {
         totalRooms: trends.length,
         totalViews: trends.reduce((sum, t) => sum + t.totalViews, 0),
@@ -1811,12 +1748,7 @@ app.get('/api/trends', async (req, res) => {
   }
 });
 
-
 app.delete('/api/users/:id', adminController.deleteUser);
-//j
-
-
-// ==================== START SERVER ====================
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
