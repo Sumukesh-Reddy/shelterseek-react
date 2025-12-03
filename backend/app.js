@@ -1162,7 +1162,7 @@ app.get('/api/new-customers', async (req, res) => {
     // Combine and sort by creation date (newest first)
     const allCustomers = [...travelers, ...hosts]
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 5); // Take only top 5 newest overall
+      .slice(0, 4); // Take only top 5 newest overall
 
     // Format the response
     const formattedCustomers = allCustomers.map(customer => ({
@@ -1206,7 +1206,7 @@ app.get('/api/new-customers', async (req, res) => {
 
 app.get('/api/recent-activities', async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 5;
     const allActivities = [];
 
     // 1. Get recent bookings
