@@ -94,89 +94,133 @@ const AdminTrends = () => {
   const styles = {
     page: {
       minHeight: "100vh",
-      background: "linear-gradient(135deg,#eff6ff,#ffffff,#ecfeff)",
+      background: "linear-gradient(135deg,#fff5fb,#faf7ff,#fdfcff)",
       padding: 20,
       fontFamily: "Inter, Poppins, sans-serif",
     },
+  
     container: {
-      maxWidth: 1400,
+      maxWidth: 1300,
       margin: "0 auto",
     },
+  
     title: {
-      fontSize: 32,
+      fontSize: 30,
       fontWeight: 800,
-      marginBottom: 8,
+      marginBottom: 6,
+      background: "linear-gradient(90deg,#d72d6e,#7c3aed)",
+      WebkitBackgroundClip: "text",
+      color: "transparent",
     },
+  
     subtitle: {
-      color: "#64748b",
-      marginBottom: 24,
+      color: "#7b7b7b",
+      marginBottom: 20,
       fontSize: 14,
     },
+  
+    /* SUMMARY CARDS */
     grid4: {
       display: "grid",
       gridTemplateColumns: "repeat(auto-fit, minmax(220px,1fr))",
-      gap: 20,
-      marginBottom: 24,
+      gap: 18,
+      marginBottom: 26,
     },
+  
     card: {
-      background: "#fff",
+      background: "rgba(255,255,255,0.85)",
       borderRadius: 16,
       padding: 20,
-      boxShadow: "0 10px 24px rgba(2,6,23,0.08)",
-      border: "1px solid rgba(2,6,23,0.06)",
+      border: "1px solid rgba(0,0,0,0.05)",
+      backdropFilter: "blur(6px)",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+      transition: "0.2s",
     },
+  
     cardTitle: {
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: 600,
-      color: "#475569",
-      marginBottom: 6,
+      color: "#666",
+      marginBottom: 4,
     },
+  
     cardValue: {
-      fontSize: 30,
+      fontSize: 28,
       fontWeight: 800,
+      background: "linear-gradient(90deg,#d72d6e,#7c3aed)",
+      WebkitBackgroundClip: "text",
+      color: "transparent",
     },
+  
+    /* SECTION BOX */
     section: {
-      background: "#fff",
+      background: "rgba(255,255,255,0.9)",
       borderRadius: 16,
-      padding: 24,
-      marginBottom: 24,
-      boxShadow: "0 10px 24px rgba(2,6,23,0.08)",
-      border: "1px solid rgba(2,6,23,0.06)",
+      padding: 22,
+      marginBottom: 26,
+      backdropFilter: "blur(8px)",
+      boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
+      border: "1px solid rgba(0,0,0,0.05)",
     },
+  
+    /* BUTTON GROUP */
     btnGroup: {
       display: "flex",
       gap: 10,
-      marginBottom: 16,
+      marginBottom: 14,
       flexWrap: "wrap",
     },
+  
     btn: (active) => ({
       padding: "8px 14px",
       borderRadius: 12,
       border: "none",
-      background: active ? "#4e73df" : "#eef2f7",
-      color: active ? "white" : "#111",
+      background: active
+        ? "linear-gradient(90deg,#d72d6e,#a12672)"
+        : "#f3f1f4",
+      color: active ? "white" : "#333",
       cursor: "pointer",
       fontWeight: 600,
+      boxShadow: active ? "0 4px 10px rgba(215,45,110,0.25)" : "none",
+      transition: "0.2s",
     }),
+  
+    /* TABLE */
     table: {
       width: "100%",
       borderCollapse: "collapse",
-      marginTop: 12,
+      marginTop: 10,
     },
+  
     th: {
       textAlign: "left",
       padding: 10,
-      background: "#f1f5f9",
-      fontSize: 13,
-      fontWeight: 700,
+      background: "linear-gradient(90deg,#d72d6e,#7c3aed)",
+      color: "white",
+      fontSize: 12,
+      fontWeight: 600,
     },
+  
     td: {
       padding: 10,
-      borderBottom: "1px solid #e5e7eb",
+      borderBottom: "1px solid rgba(0,0,0,0.06)",
       fontSize: 14,
     },
+  
+    /* Hover Row */
+    trHover: {
+      background: "#ffe7f1",
+    },
+  
+    /* Chart Shadow Box */
+    chartBox: {
+      borderRadius: 14,
+      padding: 10,
+      background: "rgba(255,255,255,0.55)",
+      backdropFilter: "blur(5px)",
+    },
   };
-
+  
   if (loading)
     return (
       <div style={styles.page}>
