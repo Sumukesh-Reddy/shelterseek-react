@@ -24,14 +24,14 @@ const ChatbotIcon = () => {
           {/* AI Bot Head */}
           <div className="chatbot-head">
             {/* Bot "face" */}
-            <div className="bot-face">
-              <div className="bot-eyes">
-                <div className="bot-eye left-eye"></div>
-                <div className="bot-eye right-eye"></div>
+            <div className="modal-bot-face">
+              <div> 
+                <div className="modal-bot-eye"></div>
+                <div className="modal-bot-eye"></div>
               </div>
-              <div className="bot-mouth"></div>
+              <div className="modal-bot-mouth"></div>
             </div>
-            
+                        
             {/* AI Circuit Lines */}
             <div className="circuit-line line-1"></div>
             <div className="circuit-line line-2"></div>
@@ -56,16 +56,9 @@ const ChatbotIcon = () => {
           <div className="chatbot-modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="chatbot-modal-header">
               <div className="chatbot-modal-title">
-                <div className="chatbot-modal-icon">
-                  <div className="modal-bot-face">
-                    <div className="modal-bot-eye"></div>
-                    <div className="modal-bot-eye"></div>
-                    <div className="modal-bot-mouth"></div>
-                  </div>
-                </div>
                 <div>
                   <div className="chatbot-modal-title-main">
-                    <span className="ai-badge">AI</span> Helo — Hotel Booking Assistant
+                    <span className="ai-badge">AI</span> ShelterSeek chatbot — Hotel Booking Assistant
                   </div>
                   <div className="chatbot-modal-title-sub">Powered by artificial intelligence • 24/7 support</div>
                 </div>

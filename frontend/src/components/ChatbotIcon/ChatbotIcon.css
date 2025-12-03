@@ -294,7 +294,23 @@
       transform: translateY(0) scale(1);
     }
   }
+
   
+  
+  /* Make the eyes container */
+  .modal-bot-face > div:first-child {
+    display: flex;
+    justify-content: center;
+  }
+  
+  .modal-bot-mouth {
+    width: 12px;
+    height: 4px;
+    background: white;
+    border-radius: 2px;
+    margin-top: 4px;
+    animation: mouthTalk 2s infinite;
+  }
   .chatbot-modal-header {
     display: flex;
     justify-content: space-between;
@@ -337,25 +353,8 @@
     overflow: hidden;
   }
   
-  .modal-bot-face {
-    position: relative;
-    width: 30px;
-    height: 30px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
   
-  .modal-bot-eye {
-    width: 6px;
-    height: 6px;
-    background: white;
-    border-radius: 50%;
-    margin: 1px;
-    display: inline-block;
-    animation: eyeBlink 3s infinite;
-  }
+
   
   @keyframes eyeBlink {
     0%, 90%, 100% {
@@ -386,7 +385,7 @@
   
   .ai-badge {
     display: inline-block;
-    background: linear-gradient(45deg, #ff6b6b, #ff8e53);
+    background: linear-gradient(45deg, #dd44b1, #ff00ae);
     color: white;
     font-size: 11px;
     font-weight: bold;
@@ -507,5 +506,55 @@
     
     .chatbot-modal-body {
       background: #1a1a1a;
+    }
+  }
+  .modal-bot-face {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    flex-direction: column; /* This makes children stack vertically */
+    align-items: center;
+    justify-content: center;
+    gap: 4px; /* Add space between eyes row and mouth */
+  }
+  
+  /* Create a container for the eyes */
+  .modal-bot-eyes-row {
+    display: flex;
+    gap: 4px; /* Space between eyes */
+  }
+  
+  .modal-bot-eye {
+    width: 6px;
+    height: 6px;
+    background: white;
+    border-radius: 50%;
+    animation: eyeBlink 3s infinite;
+  }
+  
+  .modal-bot-mouth {
+    width: 12px;
+    height: 4px;
+    background: white;
+    border-radius: 2px;
+    animation: mouthTalk 2s infinite;
+  }
+  
+  @keyframes eyeBlink {
+    0%, 90%, 100% {
+      height: 6px;
+    }
+    95% {
+      height: 1px;
+    }
+  }
+  
+  @keyframes mouthTalk {
+    0%, 100% {
+      height: 4px;
+    }
+    50% {
+      height: 8px;
     }
   }
