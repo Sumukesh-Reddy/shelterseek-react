@@ -107,15 +107,7 @@ const TravelerLogin = () => {
       localStorage.setItem('token', loginData.token);
       localStorage.setItem('user', JSON.stringify(loginData.user));
       
-      dispatch(setUser({
-        _id: loginData.user._id,
-        firstname: loginData.user.firstname,
-        lastname: loginData.user.lastname,
-        email: loginData.user.email,
-        profilePhoto: loginData.user.profilePhoto,
-        accountType: loginData.user.accountType
-      }));
-      
+      dispatch(setUser(loginData.user));
       
       // Also store in sessionStorage for consistency with profile page
       sessionStorage.setItem('currentUser', JSON.stringify({
