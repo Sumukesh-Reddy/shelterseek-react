@@ -1145,31 +1145,159 @@ app.get('/api/status', (req, res) => {
 
 app.get('/api/new-customers', async (req, res) => {
   try {
-    const customers = await LoginData.find({ accountType: 'traveller' }).lean();
-    res.json({ data: customers });
+    // Fetch latest 5 travelers
+    const travelers = await Traveler.find({ accountType: 'traveller' })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('name email accountType createdAt profilePhoto')
+      .lean();
+
+    // Fetch latest 5 hosts
+    const hosts = await Host.find({ accountType: 'host' })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('name email accountType createdAt profilePhoto')
+      .lean();
+
+    // Combine and sort by creation date (newest first)
+    const allCustomers = [...travelers, ...hosts]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 5); // Take only top 5 newest overall
+
+    // Format the response
+    const formattedCustomers = allCustomers.map(customer => ({
+      id: customer._id,
+      name: customer.name || 'Unknown User',
+      email: customer.email,
+      accountType: customer.accountType === 'traveller' ? 'Traveler' : 'Host',
+      joinedDate: customer.createdAt ? 
+        new Date(customer.createdAt).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        }) : 'Recently',
+      avatar: customer.profilePhoto || 
+        (customer.accountType === 'traveller' ? 
+          'https://ui-avatars.com/api/?name=' + encodeURIComponent(customer.name || 'User') + '&background=4e73df&color=fff' :
+          'https://ui-avatars.com/api/?name=' + encodeURIComponent(customer.name || 'Host') + '&background=1cc88a&color=fff'
+        ),
+      isNew: customer.createdAt ? 
+        (Date.now() - new Date(customer.createdAt).getTime()) < (7 * 24 * 60 * 60 * 1000) : true
+    }));
+
+    res.json({ 
+      success: true,
+      data: formattedCustomers,
+      count: formattedCustomers.length,
+      summary: {
+        travelersCount: travelers.length,
+        hostsCount: hosts.length,
+        totalNewCustomers: formattedCustomers.length
+      }
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Error fetching new customers:', err);
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
   }
 });
 
 app.get('/api/recent-activities', async (req, res) => {
   try {
-    const activities = await Booking.find()
-      .sort({ updatedAt: -1, paymentDate: -1 })
-      .limit(5)
+    const limit = parseInt(req.query.limit) || 10;
+    const allActivities = [];
+
+    // 1. Get recent bookings
+    const bookings = await Booking.find({
+      bookingStatus: { $in: ['confirmed', 'checked_in', 'completed'] }
+    })
+      .sort({ updatedAt: -1 })
+      .limit(limit)
       .lean();
 
-    const formattedActivities = activities.map(a => ({
-      name: a.userName,
-      action: `booked room ${a.roomId}`,
-      email: a.userEmail,
-      updatedAt: a.updatedAt || a.paymentDate,
-    }));
+    for (const booking of bookings) {
+      let roomTitle = 'Room';
+      
+      try {
+        const room = await RoomData.findById(booking.roomId).select('title').lean();
+        if (room?.title) roomTitle = room.title;
+      } catch (err) {
+        console.log(`Could not fetch room ${booking.roomId}:`, err.message);
+      }
+      
+      const bookingId = booking.bookingId || booking._id.toString().substring(0, 8);
+      const date = booking.updatedAt || booking.paymentDate || booking.createdAt;
+      
+      allActivities.push({
+        type: 'booking',
+        id: booking._id,
+        name: booking.userName || 'Guest',
+        action: `Room Booked "${roomTitle}" with ${bookingId}`,
+        email: booking.userEmail,
+        date: date,
+        dateFormatted: date ? new Date(date).toLocaleDateString() : 'N/A',
+        timeFormatted: date ? new Date(date).toLocaleTimeString([], { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        }) : 'N/A',
+        timestamp: date ? new Date(date).getTime() : Date.now()
+      });
+    }
 
-    res.json({ data: formattedActivities });
+    // 2. Get recent room uploads (last 7 days)
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    
+    const roomUploads = await RoomData.find({
+      createdAt: { $gte: weekAgo }
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    for (const room of roomUploads) {
+      allActivities.push({
+        type: 'room_upload',
+        id: room._id,
+        name: room.name || 'Host',
+        action: `uploaded a new room named "${room.title || 'New Room'}"`,
+        email: room.email,
+        details: {
+          roomName: room.title,
+          location: room.location,
+          price: room.price
+        },
+        date: room.createdAt,
+        dateFormatted: room.createdAt ? new Date(room.createdAt).toLocaleDateString() : 'N/A',
+        timeFormatted: room.createdAt ? new Date(room.createdAt).toLocaleTimeString([], { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        }) : 'N/A',
+        timestamp: room.createdAt ? new Date(room.createdAt).getTime() : Date.now()
+      });
+    }
+
+    // Sort by timestamp and take top limit
+    const sortedActivities = allActivities
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, limit);
+
+    res.json({ 
+      success: true,
+      data: sortedActivities,
+      count: sortedActivities.length,
+      types: {
+        bookings: allActivities.filter(a => a.type === 'booking').length,
+        roomUploads: allActivities.filter(a => a.type === 'room_upload').length
+      }
+    });
   } catch (err) {
     console.error('Error fetching recent activities:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
   }
 });
 
@@ -1178,27 +1306,27 @@ app.get('/api/revenue', async (req, res) => {
     const bookings = await Booking.find({
       paymentStatus: 'completed',
       bookingStatus: { $in: ['confirmed', 'checked_in', 'completed'] }
-    }).lean();
+    })
+    .sort({ paymentDate: -1 })
+    .lean();
 
     console.log(`Found ${bookings.length} completed bookings for revenue calculation`);
 
-    if (bookings.length > 0) {
-      console.log('Sample booking structure:', {
-        id: bookings[0]._id,
-        totalCost: bookings[0].totalCost,
-        amount: bookings[0].amount,
-        checkIn: bookings[0].checkIn,
-        paymentStatus: bookings[0].paymentStatus
-      });
-    }
-
+    // Use paymentDate as primary date for revenue calculation
     const validBookings = bookings.filter(b => {
       const cost = b.totalCost || b.amount;
-      return !isNaN(Number(cost)) && Number(cost) > 0;
+      const paymentDate = b.paymentDate || b.createdAt || b.checkIn;
+      return !isNaN(Number(cost)) && Number(cost) > 0 && paymentDate;
     });
 
     console.log(`Valid bookings for revenue: ${validBookings.length}`);
 
+    // Helper function to get date from booking
+    const getBookingDate = (booking) => {
+      return new Date(booking.paymentDate || booking.createdAt || booking.checkIn);
+    };
+
+    // Calculate total revenue
     const totalRevenue = validBookings.reduce((sum, b) => {
       const cost = b.totalCost || b.amount || 0;
       return sum + Number(cost);
@@ -1208,16 +1336,23 @@ app.get('/api/revenue', async (req, res) => {
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth();
     
+    // Get start of current month
     const startOfMonth = new Date(currentYear, currentMonth, 1);
     
+    // Get start of current week (Monday)
     const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() + 1);
+    startOfWeek.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1));
     startOfWeek.setHours(0, 0, 0, 0);
 
+    // Get start of today
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+
+    // Calculate revenues
     const thisMonthRevenue = validBookings
       .filter(b => {
-        const checkIn = new Date(b.checkIn);
-        return checkIn >= startOfMonth && checkIn <= now;
+        const bookingDate = getBookingDate(b);
+        return bookingDate >= startOfMonth && bookingDate <= now;
       })
       .reduce((sum, b) => {
         const cost = b.totalCost || b.amount || 0;
@@ -1226,56 +1361,52 @@ app.get('/api/revenue', async (req, res) => {
 
     const thisWeekRevenue = validBookings
       .filter(b => {
-        const checkIn = new Date(b.checkIn);
-        return checkIn >= startOfWeek && checkIn <= now;
+        const bookingDate = getBookingDate(b);
+        return bookingDate >= startOfWeek && bookingDate <= now;
       })
       .reduce((sum, b) => {
         const cost = b.totalCost || b.amount || 0;
         return sum + Number(cost);
       }, 0);
 
-    const dailyRevenue = {};
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(today.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      
-      const dayRevenue = validBookings
-        .filter(b => {
-          const checkIn = new Date(b.checkIn);
-          checkIn.setHours(0, 0, 0, 0);
-          return checkIn.getTime() === date.getTime();
-        })
-        .reduce((sum, b) => {
-          const cost = b.totalCost || b.amount || 0;
-          return sum + Number(cost);
-        }, 0);
-      
-      dailyRevenue[dateStr] = dayRevenue;
-    }
+    const todayRevenue = validBookings
+      .filter(b => {
+        const bookingDate = getBookingDate(b);
+        return bookingDate >= startOfToday && bookingDate <= now;
+      })
+      .reduce((sum, b) => {
+        const cost = b.totalCost || b.amount || 0;
+        return sum + Number(cost);
+      }, 0);
 
-    const monthlyRevenue = {};
-    for (let i = 5; i >= 0; i--) {
-      const monthDate = new Date(currentYear, currentMonth - i, 1);
-      const monthKey = monthDate.toLocaleString('default', { month: 'short', year: '2-digit' });
-      
-      const monthStart = new Date(currentYear, currentMonth - i, 1);
-      const monthEnd = new Date(currentYear, currentMonth - i + 1, 0);
-      
-      const monthRev = validBookings
-        .filter(b => {
-          const checkIn = new Date(b.checkIn);
-          return checkIn >= monthStart && checkIn <= monthEnd;
-        })
-        .reduce((sum, b) => {
-          const cost = b.totalCost || b.amount || 0;
-          return sum + Number(cost);
-        }, 0);
-      
-      monthlyRevenue[monthKey] = monthRev;
+    // Debug logging
+    console.log('Revenue summary:', {
+      total: totalRevenue,
+      thisMonth: thisMonthRevenue,
+      thisWeek: thisWeekRevenue,
+      today: todayRevenue,
+      bookingsInMonth: validBookings.filter(b => getBookingDate(b) >= startOfMonth).length,
+      bookingsInWeek: validBookings.filter(b => getBookingDate(b) >= startOfWeek).length,
+      dateRange: {
+        monthStart: startOfMonth.toISOString(),
+        weekStart: startOfWeek.toISOString(),
+        todayStart: startOfToday.toISOString(),
+        now: now.toISOString()
+      }
+    });
+
+    // For debugging, log some sample dates
+    if (validBookings.length > 0) {
+      console.log('Sample booking dates:');
+      validBookings.slice(0, 3).forEach((b, i) => {
+        console.log(`Booking ${i + 1}:`, {
+          paymentDate: b.paymentDate,
+          createdAt: b.createdAt,
+          checkIn: b.checkIn,
+          amount: b.totalCost || b.amount,
+          dateObj: getBookingDate(b).toISOString()
+        });
+      });
     }
 
     res.json({ 
@@ -1283,8 +1414,7 @@ app.get('/api/revenue', async (req, res) => {
       totalRevenue, 
       thisMonthRevenue, 
       thisWeekRevenue,
-      dailyRevenue,
-      monthlyRevenue,
+      todayRevenue,
       currency: 'INR',
       bookingCount: validBookings.length,
       averageBookingValue: validBookings.length > 0 ? totalRevenue / validBookings.length : 0
