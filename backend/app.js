@@ -1823,8 +1823,7 @@ let isConnected = false;
 // -------------------------------
 async function connectToMongoDB() {
   try {
-    const connectionString = process.env.ADMIN_TRAVELER_URI || 
-                           "mongodb+srv://jhansi:1231231231@backenddb.3pohwqp.mongodb.net/Admin_Traveler?retryWrites=true&w=majority";
+    const connectionString = process.env.ADMIN_TRAVELER_URI ;
     
     mongoClient = new MongoClient(connectionString);
     await mongoClient.connect();
