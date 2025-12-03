@@ -44,6 +44,8 @@ import {
   faCalendarCheck
 } from '@fortawesome/free-solid-svg-icons';
 
+//hostpage
+
 // ChartJS.register(
 //   CategoryScale,
 //   LinearScale,
