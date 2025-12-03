@@ -398,7 +398,7 @@ const HostIndex = () => {
             <button className="host-user-close-btn" onClick={() => setIsMenuOpen(false)}>×</button>
             <ul>
               <li><a href="/dashboard">Dashboard</a></li>
-              <li><a href="/logout">Logout</a></li>
+              <li><a href="/">Logout</a></li>
             </ul>
           </div>
         )}
