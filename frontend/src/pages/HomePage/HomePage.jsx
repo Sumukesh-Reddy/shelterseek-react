@@ -1,5 +1,5 @@
 // pages/HomePage.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '../../components/Navbar/Navbar';
 import Slider from '../../components/Slider/Slider';
 import FilterMenu from '../../components/FilterMenu/FilterMenu';
@@ -10,8 +10,16 @@ import ExplorerButton from '../../components/ExploreButton/ExploreButton.jsx';
 import Footer from '../../components/Footer/Footer';
 import './HomePage.css';
 
+// 1. Import the Intro Component
+import IntroAnimation from '../../components/IntroAnimation/IntroAnimation'; 
 
 const HomePage = () => {
+  // 2. Add state for showing the intro
+  // We check sessionStorage so it only runs once per browser session
+  const [showIntro, setShowIntro] = useState(() => {
+    return !sessionStorage.getItem('hasSeenIntro');
+  });
+
   const [showFilter, setShowFilter] = useState(false);
   const [filters, setFilters] = useState({
     checkIn: '',
@@ -33,6 +41,12 @@ const HomePage = () => {
     searchKeywords: ''
   });
 
+  // 3. Handler for when the door animation finishes
+  const handleIntroComplete = () => {
+    sessionStorage.setItem('hasSeenIntro', 'true');
+    setShowIntro(false);
+  };
+
   const toggleFilterMenu = () => {
     console.log('Toggling filter menu:', !showFilter);
     setShowFilter(!showFilter);
@@ -50,6 +64,9 @@ const HomePage = () => {
 
   return (
     <div className="home-page">
+      {/* 4. Conditionally Render the Intro */}
+      {showIntro && <IntroAnimation onComplete={handleIntroComplete} />}
+
       <Navbar searchKeywords={filters.searchKeywords} onSearchChange={handleSearchChange} />
       <Slider />
       <br/>

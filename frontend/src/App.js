@@ -1,5 +1,9 @@
+// App.js
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Provider } from 'react-redux';
+import store from "./store";
+
 import HomePage from './pages/HomePage/HomePage';
 import RoomLayout from './pages/RoomLayout/RoomLayout';
 import About from './components/About/About';
@@ -35,43 +39,44 @@ import HostRequests from "./pages/HostRequests/HostRequests";
 
 function App() {
   return (
-    <Router>
-      <ChatbotIcon />
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/about" element={<About />} />
-        <Route path="/room/:id" element={<RoomLayout />} />
-        <Route path="/wishlist" element={<Wishlist />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/messages" element={<Messages />} />
-        <Route path="/message" element={<Message />} />
-        <Route path="/loginweb" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/traveler-login" element={<TravelerLogin />} />
-        <Route path="/host-login" element={<HostLogin />} />
-        <Route path="/loginweb" element={<LoginSelection />} />
-        <Route path="/admin-login" element={<AdminLogin />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/payment" element={<Payment />} />
-        <Route path="/host_index" element={<HostIndex />} />
-        <Route path="/dashboard" element={<HostDashboard />} />
-        <Route path="/hostProfile" element={<HostProfile />} />
-        <Route path="/history" element={<History />} />
-        <Route path="/BookedHistory" element={<BookedHistory />} />
-        <Route path="/AdminDashboard" element={<AdminDashboard />} />
-        <Route path="/admin_notifications" element={<AdminNotifications />} />
-        <Route path="/admin_map" element={<AdminMaps />} />
-        <Route path="/admin/maps/:hostEmail" element={<AdminMapsView />} />
-        <Route path="/host/:email" element={<HostDetails />} />
-        <Route path="/admin_trends" element={<AdminTrends />} />
-        <Route path="/traveler/:email/bookings" element={<TravelerDetails />} />
-        <Route path="/chatbot" element={<HotelChatbot />} />
-        <Route path="/admin/hostrequests" element={<HostRequests />} />
-
-      </Routes>
-    </Router>
+    <Provider store={store}>
+      <Router>
+        <ChatbotIcon />
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/room/:id" element={<RoomLayout />} />
+          <Route path="/wishlist" element={<Wishlist />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/messages" element={<Messages />} />
+          <Route path="/message" element={<Message />} />
+          <Route path="/loginweb" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/traveler-login" element={<TravelerLogin />} />
+          <Route path="/host-login" element={<HostLogin />} />
+          <Route path="/loginweb" element={<LoginSelection />} />
+          <Route path="/admin-login" element={<AdminLogin />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/payment" element={<Payment />} />
+          <Route path="/host_index" element={<HostIndex />} />
+          <Route path="/dashboard" element={<HostDashboard />} />
+          <Route path="/hostProfile" element={<HostProfile />} />
+          <Route path="/history" element={<History />} />
+          <Route path="/BookedHistory" element={<BookedHistory />} />
+          <Route path="/AdminDashboard" element={<AdminDashboard />} />
+          <Route path="/admin_notifications" element={<AdminNotifications />} />
+          <Route path="/admin_map" element={<AdminMaps />} />
+          <Route path="/admin/maps/:hostEmail" element={<AdminMapsView />} />
+          <Route path="/host/:email" element={<HostDetails />} />
+          <Route path="/admin_trends" element={<AdminTrends />} />
+          <Route path="/traveler/:email/bookings" element={<TravelerDetails />} />
+          <Route path="/chatbot" element={<HotelChatbot />} />
+          <Route path="/admin/hostrequests" element={<HostRequests />} />
+        </Routes>
+      </Router>
+    </Provider>
   );
 }
 

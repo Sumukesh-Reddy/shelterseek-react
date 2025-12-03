@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useDispatch } from "react-redux";
+import { setUser } from "../../store/slices/userSlice";
 import './Login.css';
 
 const HostLogin = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const [step, setStep] = useState(1); // 1: email/password, 2: OTP verification
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -103,6 +106,10 @@ const HostLogin = () => {
       
       localStorage.setItem('token', loginData.token);
       localStorage.setItem('user', JSON.stringify(loginData.user));
+
+      dispatch(setUser(loginData.user));
+      
+      
       sessionStorage.setItem('currentUser', JSON.stringify(loginData.user));
       navigate('/host_index');
     } catch (err) {
@@ -125,7 +132,6 @@ const HostLogin = () => {
     if (resendTimer > 0) return;
     await sendOtp();
   };
-
 
   return (
     <div className="auth-container">
@@ -261,4 +267,3 @@ const HostLogin = () => {
 };
 
 export default HostLogin;
-
