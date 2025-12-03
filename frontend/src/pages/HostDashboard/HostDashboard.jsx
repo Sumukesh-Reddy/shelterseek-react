@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faArrowLeft } from "@fortawesome/free-solid-svg-icons";
 import {
   faUser, faHome, faCalendar, faDollarSign, faSignOutAlt,
   faEdit, faTrash, faImages, faStar, faAlignLeft, faRupeeSign,
@@ -42,7 +43,7 @@ const styles = {
     flexDirection: 'column',
   },
   mainContent: {
-    marginLeft: '270px',   // Fixed: was 250px → now no overlap!
+    marginLeft: '270px',  
     flex: 1,
     padding: '2rem',
     minHeight: '100vh',
@@ -158,6 +159,20 @@ const styles = {
     borderLeft: '3px solid #d72d6e',
     fontSize: '0.875rem',
   },
+  backButton: {
+  display: 'flex',
+  alignItems: 'center',
+  padding: '0.75rem 1rem',
+  borderRadius: '0.375rem',
+  color: '#4b5563',     // same as navLink text color
+  textDecoration: 'none',
+  transition: 'all 0.2s',
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  textAlign: 'left',
+  fontSize: '1rem',
+},
   suggestionsSimpleSuccess: {
     margin: '1rem 0',
     padding: '0.75rem',
@@ -167,6 +182,7 @@ const styles = {
     fontSize: '0.875rem',
     color: '#16a34a',
   },
+  
   suggestionsStrong: { color: '#d72d6e', fontWeight: 600 },
   suggestionsStrongSuccess: { color: '#16a34a', fontWeight: 600 },
   suggestionsList: { margin: '0.5rem 0 0 0', paddingLeft: '1.25rem' },
@@ -424,6 +440,13 @@ const HostDashboard = () => {
           <p style={styles.logoSubtitle}>Host Dashboard</p>
         </div>
         <nav style={styles.navLinks}>
+          <button
+  type="button"
+  onClick={() => navigate('/host_index')}
+  style={styles.navLink}
+>
+  <FontAwesomeIcon icon={faArrowLeft} style={styles.navLinkIcon} /> Back
+</button>
           <button type="button" onClick={() => navigate('/profile')} style={styles.navLink}>
             <FontAwesomeIcon icon={faUser} style={styles.navLinkIcon} /> Profile
           </button>

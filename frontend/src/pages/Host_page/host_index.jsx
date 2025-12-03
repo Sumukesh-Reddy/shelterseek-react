@@ -377,7 +377,20 @@ const HostIndex = () => {
     <>
       <div className="host-top-navbar">
         <div className="host-logo"><h2>ShelterSeek</h2></div>
-        <button className="host-traveler" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+        <button
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          style={{
+            marginLeft: 'auto',
+            background: 'none',
+            border: 'none',
+            fontSize: '28px',
+            cursor: 'pointer',
+            color: '#333',
+            transition: 'color 0.2s ease',
+          }}
+          onMouseEnter={(e) => (e.target.style.color = '#d72d6e')}
+          onMouseLeave={(e) => (e.target.style.color = '#333')}
+        >
           <FontAwesomeIcon icon={faUser} />
         </button>
         {isMenuOpen && (
