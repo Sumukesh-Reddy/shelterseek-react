@@ -388,14 +388,14 @@ const AdminTrends = () => {
                   <td style={styles.td}>{r.engagement}%</td>
                   <td style={styles.td}>₹{r.price}</td>
                   <td style={styles.td}>
-                    <button
+                    {/* <button
                       style={styles.btn(true)}
                       onClick={() =>
                         navigate(`/admin/rooms/${r.id}`)
                       }
                     >
                       View
-                    </button>
+                    </button> */}
                   </td>
                 </tr>
               ))}
