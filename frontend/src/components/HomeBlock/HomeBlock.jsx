@@ -41,8 +41,8 @@ const HomeBlock = ({ room }) => {
 
   const handleClick = () => {
     // Check if user is logged in
-    const currentUser = sessionStorage.getItem("currentUser");
-    
+    const currentUser =sessionStorage.getItem("currentUser") ||localStorage.getItem("user");
+
     if (!currentUser) {
       // User not logged in - redirect to login selection page
       // Store the intended destination for redirect after login

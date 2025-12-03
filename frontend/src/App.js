@@ -20,6 +20,16 @@ import Payment from './pages/Payment/Payment';
 import HostIndex from './pages/Host_page/host_index';
 import HostDashboard from './pages/HostDashboard/HostDashboard';
 import HostProfile from './pages/HostProfile/HostProfile';
+import History from './pages/History/History';
+import BookedHistory from './pages/BookedRooms/BookedHistory';
+import AdminDashboard from './pages/AdminDashboard/AdminDashboard';
+import AdminNotifications from './pages/AdminNotifications/AdminNotifications';
+import AdminMaps from './pages/AdminMaps/AdminMaps';
+import AdminMapsView from './pages/AdminMaps/AdminMapsView';
+import HostDetails from './pages/AdminNotifications/HostDetails';
+import AdminTrends from './pages/AdminTrends/AdminTrends';
+import TravelerDetails from './pages/AdminNotifications/TravelerDetails';
+
 
 function App() {
   return (
@@ -45,6 +55,15 @@ function App() {
         <Route path="/host_index" element={<HostIndex />} />
         <Route path="/dashboard" element={<HostDashboard />} />
         <Route path="/hostProfile" element={<HostProfile />} />
+        <Route path="/history" element={<History />} />
+        <Route path="/BookedHistory" element={<BookedHistory />} />
+        <Route path="/AdminDashboard" element={<AdminDashboard />} />
+        <Route path="/admin_notifications" element={<AdminNotifications />} />
+        <Route path="/admin_map" element={<AdminMaps />} />
+        <Route path="/admin/maps/:hostEmail" element={<AdminMapsView />} />
+        <Route path="/host/:email" element={<HostDetails />} />
+        <Route path="/admin_trends" element={<AdminTrends />} />
+        <Route path="/traveler/:email/bookings" element={<TravelerDetails />} />
       </Routes>
     </Router>
   );

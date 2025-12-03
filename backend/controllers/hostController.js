@@ -96,7 +96,7 @@ const listingSchema = new mongoose.Schema({
   reviews: [{
     type: String
   }],
-  availability: [{
+  unavailableDates: [{
     type: Date
   }],
   createdAt: {
@@ -198,9 +198,9 @@ const createListing = async (req, res) => {
       likes: 0,
       booking: false,
       reviews: [],
-      availability: req.body.availability ? (Array.isArray(req.body.availability) 
-        ? req.body.availability.map(date => new Date(date))
-        : JSON.parse(req.body.availability).map(date => new Date(date))
+      unavailableDates: req.body.unavailableDates ? (Array.isArray(req.body.unavailableDates) 
+        ? req.body.unavailableDates.map(date => new Date(date))
+        : JSON.parse(req.body.unavailableDates).map(date => new Date(date))
       ) : []
     };
 
@@ -280,11 +280,11 @@ const updateListing = async (req, res) => {
       }
     };
     
-    // Handle availability dates
-    if (req.body.availability) {
-      updatedData.availability = Array.isArray(req.body.availability)
-        ? req.body.availability.map(date => new Date(date))
-        : JSON.parse(req.body.availability).map(date => new Date(date));
+    // Handle unavailableDates dates
+    if (req.body.unavailableDates) {
+      updatedData.unavailableDates = Array.isArray(req.body.unavailableDates)
+        ? req.body.unavailableDates.map(date => new Date(date))
+        : JSON.parse(req.body.unavailableDates).map(date => new Date(date));
     }
     
     // Preserve existing reviews, likes, and booking if not being updated
