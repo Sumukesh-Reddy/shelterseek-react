@@ -209,9 +209,6 @@
 .status-rejected::before { background: #e63946; }
 .status-rejected.glow::after { background: #ffb3b3; }
 
-/* ---------------------------------------------------
-    MODAL
---------------------------------------------------- */
 .modal {
     position: fixed;
     inset: 0;
@@ -244,9 +241,6 @@
     color: #718096;
 }
 
-/* ---------------------------------------------------
-    IMAGE CAROUSEL
---------------------------------------------------- */
 .modal-media .image-carousel {
     display: flex;
     gap: 1rem;
