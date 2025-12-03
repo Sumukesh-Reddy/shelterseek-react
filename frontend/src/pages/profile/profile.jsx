@@ -133,12 +133,15 @@ export default function Profile() {
 
             <div className="info-grid">
 
+                            
+
               <div className="info-item">
                 <span className="info-label">Full Name:</span>
                 <span className="info-value">
-                  {currentUser.firstname && currentUser.lastname
-                    ? `${currentUser.firstname} ${currentUser.lastname}`
-                    : currentUser.name || "N/A"}
+                  {/* Check for both lowercase and camelCase variations */}
+                  {(currentUser.firstname || currentUser.firstName) && (currentUser.lastname || currentUser.lastName)
+                    ? `${currentUser.firstname || currentUser.firstName} ${currentUser.lastname || currentUser.lastName}`
+                    : currentUser.name || "User"} 
                 </span>
               </div>
 
@@ -157,10 +160,10 @@ export default function Profile() {
               <div className="info-item">
                 <span className="info-label">Member ID:</span>
                 <span className="info-value">
+                  {/* Check for _id AND id */}
                   {(currentUser._id || currentUser.id)?.substring(0, 8) || "N/A"}...
                 </span>
               </div>
-
             </div>
           </div>
 
@@ -234,6 +237,12 @@ export default function Profile() {
                 Messages
               </button>
 
+              <button
+                onClick={() => navigate("/BookedHistory")}
+                className="btn btn-secondary"
+              >
+                Booked History
+              </button>
               <button onClick={logout} className="btn btn-danger">
                 Logout
               </button>
