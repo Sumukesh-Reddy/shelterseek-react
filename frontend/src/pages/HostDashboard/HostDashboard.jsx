@@ -2,63 +2,56 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faArrowLeft } from "@fortawesome/free-solid-svg-icons";
 import {
-  faUser,
-  faHome,
-  faCalendar,
-  faDollarSign,
-  faSignOutAlt,
-  faEdit,
-  faTrash,
-  faImages,
-  faStar,
-  faAlignLeft,
-  faRupeeSign,
-  faCalendarCheck
+  faUser, faHome, faCalendar, faDollarSign, faSignOutAlt,
+  faEdit, faTrash, faImages, faStar, faAlignLeft, faRupeeSign,
+  faCalendarCheck, faFilter, faTimes
 } from '@fortawesome/free-solid-svg-icons';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend
+} from 'recharts';
 
-// All styles converted from HostDashboard.css → inline objects
+const API_BASE_URL = 'http://localhost:3001';
+
 const styles = {
   dashboard: {
     display: 'flex',
     minHeight: '100vh',
     backgroundColor: '#f3f4f6',
-    color: '#1f2937',
-    fontFamily:
-      "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
   },
-
   sidebar: {
     width: '250px',
     backgroundColor: 'white',
     boxShadow: '2px 0 8px rgba(0, 0, 0, 0.1)',
     padding: '1.5rem',
     position: 'fixed',
+    top: 0,
+    left: 0,
     height: '100vh',
+    overflowY: 'auto',
+    zIndex: 1000,
     display: 'flex',
     flexDirection: 'column',
   },
-
-  logo: {
-    marginBottom: '2rem',
+  mainContent: {
+    marginLeft: '270px',  
+    flex: 1,
+    padding: '2rem',
+    minHeight: '100vh',
   },
-
-  logoTitle: {
-    fontSize: '1.5rem',
-    color: '#1f2937',
-  },
-
-  logoSubtitle: {
-    fontSize: '0.875rem',
-    color: '#d72d6e',
-  },
-
-  navLinks: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.5rem',
-  },
-
+  logo: { marginBottom: '2rem' },
+  logoTitle: { fontSize: '1.5rem', color: '#1f2937', margin: 0 },
+  logoSubtitle: { fontSize: '0.875rem', color: '#d72d6e', margin: '0.5rem 0 0' },
+  navLinks: { display: 'flex', flexDirection: 'column', gap: '0.5rem' },
   navLink: {
     display: 'flex',
     alignItems: 'center',
@@ -73,27 +66,9 @@ const styles = {
     textAlign: 'left',
     fontSize: '1rem',
   },
-
-  navLinkActive: {
-    backgroundColor: '#eff6ff',
-    color: '#d72d6e',
-  },
-
-  navLinkIcon: {
-    marginRight: '0.75rem',
-    fontSize: '1.25rem',
-  },
-
-  mainContent: {
-    flex: 1,
-    marginLeft: '250px',
-    padding: '2rem',
-  },
-
-  searchContainer: {
-    marginBottom: '1.5rem',
-  },
-
+  navLinkActive: { backgroundColor: '#eff6ff', color: '#d72d6e' },
+  navLinkIcon: { marginRight: '0.75rem', fontSize: '1.25rem' },
+  searchContainer: { marginBottom: '1.5rem' },
   searchBar: {
     width: '100%',
     maxWidth: '400px',
@@ -104,35 +79,20 @@ const styles = {
     color: '#1f2937',
     outline: 'none',
   },
-
-  listingsSection: {
-    marginBottom: '2rem',
-  },
-
+  listingsSection: { marginBottom: '2rem' },
   listingsContainer: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
     gap: '1.5rem',
   },
-
   listingCard: {
     backgroundColor: 'white',
     padding: '1.5rem',
     borderRadius: '0.5rem',
     boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
   },
-
-  listingCardTitle: {
-    fontSize: '1.25rem',
-    marginBottom: '0.5rem',
-  },
-
-  listingCardText: {
-    fontSize: '0.875rem',
-    color: '#6b7280',
-    marginBottom: '0.5rem',
-  },
-
+  listingCardTitle: { fontSize: '1.25rem', marginBottom: '0.5rem' },
+  listingCardText: { fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.5rem' },
   listingHeader: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -141,7 +101,6 @@ const styles = {
     paddingBottom: '0.5rem',
     borderBottom: '1px solid #e5e7eb',
   },
-
   listingStatusBase: {
     padding: '0.25rem 0.5rem',
     borderRadius: '0.25rem',
@@ -149,49 +108,14 @@ const styles = {
     fontWeight: 600,
     textTransform: 'uppercase',
   },
-
-  listingStatusActive: {
-    backgroundColor: '#dcfce7',
-    color: '#166534',
-  },
-
-  listingStatusInactive: {
-    backgroundColor: '#fef2f2',
-    color: '#991b1b',
-  },
-
-  listingStatusPending: {
-    backgroundColor: '#fef3c7',
-    color: '#92400e',
-  },
-
-  listingStatusVerified: {
-    backgroundColor: '#dcfce7',
-    color: '#166534',
-  },
-
-  listingStatusRejected: {
-    backgroundColor: '#fef2f2',
-    color: '#991b1b',
-  },
-
-  listingDetails: {
-    marginTop: '1rem',
-    fontSize: '0.875rem',
-    color: '#1f2937',
-  },
-
-  imagesContainer: {
-    marginTop: '1rem',
-  },
-
-  imageGallery: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '0.5rem',
-    marginTop: '0.5rem',
-  },
-
+  listingStatusActive: { backgroundColor: '#dcfce7', color: '#166534' },
+  listingStatusInactive: { backgroundColor: '#fef2f2', color: '#991b1b' },
+  listingStatusPending: { backgroundColor: '#fef3c7', color: '#92400e' },
+  listingStatusVerified: { backgroundColor: '#dcfce7', color: '#166534' },
+  listingStatusRejected: { backgroundColor: '#fef2f2', color: '#991b1b' },
+  listingDetails: { marginTop: '1rem', fontSize: '0.875rem', color: '#1f2937' },
+  imagesContainer: { marginTop: '1rem' },
+  imageGallery: { display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' },
   listingImage: {
     width: '120px',
     height: '120px',
@@ -200,13 +124,7 @@ const styles = {
     border: '1px solid #e5e7eb',
     transition: 'transform 0.2s',
   },
-
-  listingActions: {
-    display: 'flex',
-    gap: '0.5rem',
-    marginTop: '1rem',
-  },
-
+  listingActions: { display: 'flex', gap: '0.5rem', marginTop: '1rem' },
   updateListingBtn: {
     padding: '0.5rem 1rem',
     border: 'none',
@@ -220,7 +138,6 @@ const styles = {
     backgroundColor: '#d72d6e',
     color: 'white',
   },
-
   deleteListingBtn: {
     padding: '0.5rem 1rem',
     border: 'none',
@@ -234,71 +151,6 @@ const styles = {
     backgroundColor: '#991b1b',
     color: 'white',
   },
-
-  bookingsSection: {
-    marginTop: '2rem',
-    backgroundColor: 'white',
-    borderRadius: '0.5rem',
-    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-    padding: '1.5rem',
-  },
-
-  earningsSection: {
-    marginTop: '2rem',
-    backgroundColor: 'white',
-    borderRadius: '0.5rem',
-    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-    padding: '1.5rem',
-  },
-
-  sectionTitle: {
-    fontSize: '1.25rem',
-    fontWeight: 600,
-    color: '#1f2937',
-    marginBottom: '1.5rem',
-  },
-
-  monthlyList: {
-    listStyle: 'none',
-    padding: 0,
-    marginBottom: '2rem',
-  },
-
-  monthlyListItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '0.75rem 1rem',
-    borderBottom: '1px solid #e5e7eb',
-    color: '#1f2937',
-  },
-
-  chartContainer: {
-    marginTop: '2rem',
-    maxWidth: '800px',
-  },
-
-  alertBase: {
-    position: 'fixed',
-    top: '2rem',
-    right: '2rem',
-    padding: '1rem 1.5rem',
-    borderRadius: '0.5rem',
-    fontSize: '0.875rem',
-    zIndex: 1000,
-  },
-
-  alertSuccess: {
-    backgroundColor: '#d1fae5',
-    color: '#065f46',
-    border: '1px solid #86efac',
-  },
-
-  alertError: {
-    backgroundColor: '#fee2e2',
-    color: '#991b1b',
-    border: '1px solid #fca5a5',
-  },
-
   suggestionsSimple: {
     margin: '1rem 0',
     padding: '0.75rem',
@@ -307,7 +159,20 @@ const styles = {
     borderLeft: '3px solid #d72d6e',
     fontSize: '0.875rem',
   },
-
+  backButton: {
+  display: 'flex',
+  alignItems: 'center',
+  padding: '0.75rem 1rem',
+  borderRadius: '0.375rem',
+  color: '#4b5563',     // same as navLink text color
+  textDecoration: 'none',
+  transition: 'all 0.2s',
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  textAlign: 'left',
+  fontSize: '1rem',
+},
   suggestionsSimpleSuccess: {
     margin: '1rem 0',
     padding: '0.75rem',
@@ -317,36 +182,11 @@ const styles = {
     fontSize: '0.875rem',
     color: '#16a34a',
   },
-
-  suggestionsStrong: {
-    color: '#d72d6e',
-    fontWeight: 600,
-  },
-
-  suggestionsStrongSuccess: {
-    color: '#16a34a',
-    fontWeight: 600,
-  },
-
-  suggestionsList: {
-    margin: '0.5rem 0 0 0',
-    paddingLeft: '1.25rem',
-  },
-
-  suggestionsListItem: {
-    marginBottom: '0.25rem',
-    color: '#6b7280',
-    lineHeight: 1.4,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-  },
-
-  chartPlaceholder: {
-    padding: '2rem',
-    textAlign: 'center',
-    color: '#666',
-  },
+  
+  suggestionsStrong: { color: '#d72d6e', fontWeight: 600 },
+  suggestionsStrongSuccess: { color: '#16a34a', fontWeight: 600 },
+  suggestionsList: { margin: '0.5rem 0 0 0', paddingLeft: '1.25rem' },
+  suggestionsListItem: { marginBottom: '0.25rem', color: '#6b7280', lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: '0.5rem' },
 };
 
 const HostDashboard = () => {
@@ -356,18 +196,17 @@ const HostDashboard = () => {
   const [listings, setListings] = useState([]);
   const [filteredListings, setFilteredListings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [bookingsData, setBookingsData] = useState(null);
-  const [earningsData, setEarningsData] = useState(null);
-  const [alert, setAlert] = useState(null);
-
-  const API_BASE_URL = 'http://localhost:3001';
+  const [showFilter, setShowFilter] = useState(false);
+  const [filters, setFilters] = useState({
+    title: '', location: '', minPrice: '', maxPrice: '', status: 'all',
+    propertyType: '', roomType: '', hostGender: '', foodFacility: '',
+    roomSize: '', capacity: '', bedrooms: '', beds: ''
+  });
+  const [analytics, setAnalytics] = useState({});
+  const [qrCodes, setQrCodes] = useState({});
 
   useEffect(() => {
-    const user = JSON.parse(
-      localStorage.getItem('user') ||
-        sessionStorage.getItem('currentUser') ||
-        'null'
-    );
+    const user = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('currentUser') || 'null');
     if (!user) {
       window.alert('Please login to view the dashboard.');
       navigate('/loginweb');
@@ -375,128 +214,74 @@ const HostDashboard = () => {
     }
     setCurrentUser(user);
     fetchListings(user.email);
+    fetchAnalytics();
   }, [navigate]);
 
   useEffect(() => {
-    if (searchTerm) {
-      const filtered = listings.filter(
-        (listing) =>
-          listing.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          listing.location?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredListings(filtered);
-    } else {
-      setFilteredListings(listings);
-    }
-  }, [searchTerm, listings]);
+    const filtered = listings.filter(listing => {
+      const matchesSearch = !searchTerm ||
+        listing.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        listing.location?.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matches = 
+        (!filters.title || listing.title?.toLowerCase().includes(filters.title.toLowerCase())) &&
+        (!filters.location || listing.location?.toLowerCase().includes(filters.location.toLowerCase())) &&
+        (!filters.minPrice || listing.price >= parseInt(filters.minPrice)) &&
+        (!filters.maxPrice || listing.price <= parseInt(filters.maxPrice)) &&
+        (filters.status === 'all' || listing.status === filters.status) &&
+        (!filters.propertyType || listing.propertyType === filters.propertyType) &&
+        (!filters.roomType || listing.roomType === filters.roomType) &&
+        (!filters.hostGender || listing.hostGender === filters.hostGender) &&
+        (!filters.foodFacility || listing.foodFacility === filters.foodFacility) &&
+        (!filters.roomSize || listing.roomSize === filters.roomSize) &&
+        (!filters.capacity || listing.capacity >= parseInt(filters.capacity)) &&
+        (!filters.bedrooms || listing.bedrooms >= parseInt(filters.bedrooms)) &&
+        (!filters.beds || listing.beds >= parseInt(filters.beds));
+
+      return matchesSearch && matches;
+    });
+    setFilteredListings(filtered);
+  }, [searchTerm, listings, filters]);
 
   const fetchListings = async (email) => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/listings`);
       if (response.data.success) {
-        const hostListings = response.data.data.listings.filter(
-          (listing) => listing.email === email
-        );
+        const hostListings = response.data.data.listings.filter(l => l.email === email);
         setListings(hostListings);
         setFilteredListings(hostListings);
       }
     } catch (error) {
       console.error('Failed to fetch listings:', error);
-      showAlert('Failed to load listings. Please try again later.', 'error');
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    sessionStorage.removeItem('currentUser');
-    navigate('/loginweb');
+  const fetchAnalytics = async () => {
+    try {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const response = await axios.get(`${API_BASE_URL}/api/host/analytics`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.data.success) {
+        setAnalytics(response.data.analytics || {});
+      }
+    } catch (error) {
+      console.error('Failed to fetch analytics:', error);
+    }
   };
 
   const handleDelete = async (listingId) => {
-    if (!window.confirm('Are you sure you want to delete this listing?')) {
-      return;
-    }
-
+    if (!window.confirm('Are you sure you want to delete this listing?')) return;
     try {
-      const response = await axios.delete(
-        `${API_BASE_URL}/api/listings/${listingId}`
-      );
-      if (response.data.success) {
-        showAlert('Listing deleted successfully!', 'success');
-        setListings(listings.filter((l) => l._id !== listingId));
-        setFilteredListings(
-          filteredListings.filter((l) => l._id !== listingId)
-        );
-      } else {
-        showAlert(
-          response.data.message || 'Failed to delete listing.',
-          'error'
-        );
-      }
+      await axios.delete(`${API_BASE_URL}/api/listings/${listingId}`);
+      setListings(prev => prev.filter(l => l._id !== listingId));
     } catch (error) {
-      showAlert('Failed to delete listing.', 'error');
+      window.alert('Failed to delete listing');
     }
   };
 
   const handleUpdate = (listingId) => {
     navigate(`/host_index?listingId=${listingId}`);
-  };
-
-  const fetchBookings = async () => {
-    try {
-      const response = await axios.get(
-        `${API_BASE_URL}/api/bookings/host/${currentUser.email}`
-      );
-      if (response.data.success) {
-        const bookings = response.data.data.bookings;
-        const monthlyBookings = processMonthlyBookings(bookings);
-        setBookingsData(monthlyBookings);
-      } else {
-        showAlert('Failed to load bookings.', 'error');
-      }
-    } catch (error) {
-      console.error('Error fetching bookings:', error);
-      showAlert('Failed to load bookings.', 'error');
-    }
-  };
-
-  const fetchEarnings = async () => {
-    try {
-      const response = await axios.get(
-        `${API_BASE_URL}/api/bookings/host/${currentUser.email}`
-      );
-      if (response.data.success) {
-        const bookings = response.data.data.bookings;
-        const monthlyEarnings = processMonthlyEarnings(bookings);
-        setEarningsData(monthlyEarnings);
-      } else {
-        showAlert('Failed to load earnings.', 'error');
-      }
-    } catch (error) {
-      console.error('Error fetching earnings:', error);
-      showAlert('Failed to load earnings.', 'error');
-    }
-  };
-
-  const processMonthlyBookings = (bookings) => {
-    const monthlyCounts = {};
-    bookings.forEach((booking) => {
-      const date = new Date(booking.checkIn);
-      const monthYear = `${date.getFullYear()}-${date.getMonth() + 1}`;
-      monthlyCounts[monthYear] = (monthlyCounts[monthYear] || 0) + 1;
-    });
-    return monthlyCounts;
-  };
-
-  const processMonthlyEarnings = (bookings) => {
-    const monthlyEarnings = {};
-    bookings.forEach((booking) => {
-      const date = new Date(booking.checkIn);
-      const monthYear = `${date.getFullYear()}-${date.getMonth() + 1}`;
-      monthlyEarnings[monthYear] =
-        (monthlyEarnings[monthYear] || 0) + (booking.amount || 0);
-    });
-    return monthlyEarnings;
   };
 
   const generateSuggestions = (listing) => {
@@ -508,8 +293,7 @@ const HostDashboard = () => {
         priority: 'high',
         icon: faImages,
         title: 'Add Images',
-        message:
-          'No images found. Add at least 5 high-quality photos to increase bookings by 40%.',
+        message: 'No images found. Add at least 5 high-quality photos to increase bookings by 40%.',
       });
     } else if (listing.images.length < 3) {
       suggestions.push({
@@ -528,8 +312,7 @@ const HostDashboard = () => {
         priority: 'high',
         icon: faStar,
         title: 'Add Amenities',
-        message:
-          'No amenities listed. Essential amenities can increase bookings significantly.',
+        message: 'No amenities listed. Essential amenities can increase bookings significantly.',
       });
     }
 
@@ -540,8 +323,7 @@ const HostDashboard = () => {
         priority: 'high',
         icon: faAlignLeft,
         title: 'Improve Description',
-        message:
-          'Description is too short or missing. Detailed descriptions increase booking rates.',
+        message: 'Description is too short or missing. Detailed descriptions increase booking rates.',
       });
     }
 
@@ -550,9 +332,8 @@ const HostDashboard = () => {
         type: 'unavailableDates',
         priority: 'high',
         icon: faCalendarCheck,
-        title: 'Set unavailableDates',
-        message:
-          'No unavailableDates dates set. Set your room unavailableDates dates to accept bookings.',
+        title: 'Set Unavailable Dates',
+        message: 'No unavailable dates set. Set your room unavailable dates to accept bookings.',
       });
     }
 
@@ -563,8 +344,7 @@ const HostDashboard = () => {
         priority: 'high',
         icon: faRupeeSign,
         title: 'Set Competitive Price',
-        message:
-          'No price set. Research similar listings in your area to set an attractive rate.',
+        message: 'No price set. Research similar listings in your area to set an attractive rate.',
       });
     }
 
@@ -576,108 +356,83 @@ const HostDashboard = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleString();
+    return new Date(dateString).toLocaleDateString();
   };
 
-  const showAlert = (message, type) => {
-    setAlert({ message, type });
-    setTimeout(() => setAlert(null), 3000);
-  };
+  const handleSectionChange = (section) => setActiveSection(section);
 
-  const handleSectionChange = (section) => {
-    setActiveSection(section);
-    if (section === 'bookings' && !bookingsData) {
-      fetchBookings();
-    } else if (section === 'earnings' && !earningsData) {
-      fetchEarnings();
+  const generateQRCode = async (listingId) => {
+    try {
+      console.log('Generating QR code for listing:', listingId);
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      console.log('Token exists:', !!token);
+
+      const response = await axios.get(`${API_BASE_URL}/api/listings/${listingId}/qr`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      console.log('QR code response:', response.data);
+
+      if (response.data.success) {
+        setQrCodes(prev => ({
+          ...prev,
+          [listingId]: response.data
+        }));
+        console.log('QR code generated successfully');
+      }
+    } catch (error) {
+      console.error('Failed to generate QR code:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      alert('Failed to generate QR code: ' + (error.response?.data?.message || error.message));
     }
   };
 
-  const renderBookingsChart = () => {
-    if (!bookingsData || Object.keys(bookingsData).length === 0) {
-      return <p>No bookings data available.</p>;
-    }
+  const downloadQRCode = (listingId, title) => {
+    const qrData = qrCodes[listingId];
+    if (!qrData) return;
 
-    return (
-      <>
-        <ul style={styles.monthlyList}>
-          {Object.entries(bookingsData)
-            .sort()
-            .map(([monthYear, count]) => {
-              const [year, month] = monthYear.split('-');
-              const date = new Date(year, month - 1).toLocaleString('default', {
-                month: 'long',
-                year: 'numeric',
-              });
-              return (
-                <li key={monthYear} style={styles.monthlyListItem}>
-                  {date}: {count} booking{count > 1 ? 's' : ''}
-                </li>
-              );
-            })}
-        </ul>
-        <div style={styles.chartContainer}>
-          <p style={styles.chartPlaceholder}>
-            Chart visualization will appear here after installing Chart.js
-            <br />
-            <small>Run: npm install chart.js react-chartjs-2</small>
-          </p>
-        </div>
-      </>
-    );
+    // Create a temporary link to download the image
+    const link = document.createElement('a');
+    link.href = qrData.qrCode;
+    link.download = `QR_${title.replace(/\s+/g, '_')}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const renderEarningsChart = () => {
-    if (!earningsData || Object.keys(earningsData).length === 0) {
-      return <p>No earnings data available.</p>;
-    }
+  const shareQRCode = async (listingId) => {
+    const qrData = qrCodes[listingId];
+    if (!qrData) return;
 
-    return (
-      <>
-        <ul style={styles.monthlyList}>
-          {Object.entries(earningsData)
-            .sort()
-            .map(([monthYear, amount]) => {
-              const [year, month] = monthYear.split('-');
-              const date = new Date(year, month - 1).toLocaleString('default', {
-                month: 'long',
-                year: 'numeric',
-              });
-              return (
-                <li key={monthYear} style={styles.monthlyListItem}>
-                  {date}: ₹{amount.toFixed(2)}
-                </li>
-              );
-            })}
-        </ul>
-        <div style={styles.chartContainer}>
-          <p style={styles.chartPlaceholder}>
-            Chart visualization will appear here after installing Chart.js
-            <br />
-            <small>Run: npm install chart.js react-chartjs-2</small>
-          </p>
-        </div>
-      </>
-    );
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Check out this listing: ${qrData.listingTitle}`,
+          text: `Scan this QR code to view the listing: ${qrData.listingTitle}`,
+          url: qrData.listingUrl
+        });
+      } catch (error) {
+        console.error('Error sharing:', error);
+        // Fallback to copying URL
+        navigator.clipboard.writeText(qrData.listingUrl);
+        alert('Listing URL copied to clipboard!');
+      }
+    } else {
+      // Fallback for browsers that don't support Web Share API
+      navigator.clipboard.writeText(qrData.listingUrl);
+      alert('Listing URL copied to clipboard!');
+    }
   };
 
-  if (!currentUser) {
-    return <div>Loading...</div>;
-  }
+  const clearAllQRCodes = () => {
+    setQrCodes({});
+    alert('All QR codes cleared. Generate fresh ones!');
+  };
 
-  // Choose alert style
-  const alertStyle =
-    alert && alert.type === 'success'
-      ? { ...styles.alertBase, ...styles.alertSuccess }
-      : alert && alert.type === 'error'
-      ? { ...styles.alertBase, ...styles.alertError }
-      : null;
+  if (!currentUser) return <div style={{ padding: '2rem' }}>Loading...</div>;
 
   return (
     <div style={styles.dashboard}>
-      {alert && <div style={alertStyle}>{alert.message}</div>}
-
       {/* Sidebar */}
       <div style={styles.sidebar}>
         <div style={styles.logo}>
@@ -686,77 +441,66 @@ const HostDashboard = () => {
         </div>
         <nav style={styles.navLinks}>
           <button
-            type="button"
-            onClick={() => navigate('/profile')}
-            style={styles.navLink}
-          >
-            <FontAwesomeIcon icon={faUser} style={styles.navLinkIcon} />
-            Profile
+  type="button"
+  onClick={() => navigate('/host_index')}
+  style={styles.navLink}
+>
+  <FontAwesomeIcon icon={faArrowLeft} style={styles.navLinkIcon} /> Back
+</button>
+          <button type="button" onClick={() => navigate('/profile')} style={styles.navLink}>
+            <FontAwesomeIcon icon={faUser} style={styles.navLinkIcon} /> Profile
           </button>
-          <button
-            type="button"
-            onClick={() => handleSectionChange('overview')}
-            style={{
-              ...styles.navLink,
-              ...(activeSection === 'overview' ? styles.navLinkActive : {}),
-            }}
-          >
-            <FontAwesomeIcon icon={faHome} style={styles.navLinkIcon} />
-            Overview
+          <button type="button" onClick={() => handleSectionChange('overview')} style={{ ...styles.navLink, ...(activeSection === 'overview' ? styles.navLinkActive : {}) }}>
+            <FontAwesomeIcon icon={faHome} style={styles.navLinkIcon} /> Overview
           </button>
-          <button
-            type="button"
-            onClick={() => handleSectionChange('bookings')}
-            style={{
-              ...styles.navLink,
-              ...(activeSection === 'bookings' ? styles.navLinkActive : {}),
-            }}
-          >
-            <FontAwesomeIcon icon={faCalendar} style={styles.navLinkIcon} />
-            Bookings
+          <button type="button" onClick={() => handleSectionChange('bookings')} style={{ ...styles.navLink, ...(activeSection === 'bookings' ? styles.navLinkActive : {}) }}>
+            <FontAwesomeIcon icon={faCalendar} style={styles.navLinkIcon} /> Bookings
           </button>
-          <button
-            type="button"
-            onClick={() => handleSectionChange('earnings')}
-            style={{
-              ...styles.navLink,
-              ...(activeSection === 'earnings' ? styles.navLinkActive : {}),
-            }}
-          >
-            <FontAwesomeIcon icon={faDollarSign} style={styles.navLinkIcon} />
-            Earnings
+          <button type="button" onClick={() => handleSectionChange('earnings')} style={{ ...styles.navLink, ...(activeSection === 'earnings' ? styles.navLinkActive : {}) }}>
+            <FontAwesomeIcon icon={faDollarSign} style={styles.navLinkIcon} /> Earnings
           </button>
-          <button
-            type="button"
-            onClick={handleLogout}
-            style={styles.navLink}
-          >
-            <FontAwesomeIcon icon={faSignOutAlt} style={styles.navLinkIcon} />
-            Logout
+          <button type="button" onClick={() => handleSectionChange('qr-codes')} style={{ ...styles.navLink, ...(activeSection === 'qr-codes' ? styles.navLinkActive : {}) }}>
+            <FontAwesomeIcon icon={faImages} style={styles.navLinkIcon} /> QR Codes
+          </button>
+          <button type="button" onClick={() => { localStorage.removeItem('user'); navigate('/loginweb'); }} style={styles.navLink}>
+            <FontAwesomeIcon icon={faSignOutAlt} style={styles.navLinkIcon} /> Logout
           </button>
         </nav>
       </div>
 
       {/* Main Content */}
       <div style={styles.mainContent}>
-        <h2
-          style={{
-            fontSize: '1.5rem',
-            fontWeight: 'bold',
-            marginBottom: '1.5rem',
-          }}
-        >
-          {activeSection === 'overview'
-            ? 'Overview'
-            : activeSection === 'bookings'
-            ? 'Bookings'
-            : 'Earnings'}
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>
+          {activeSection === 'overview' ? 'Overview' :
+           activeSection === 'bookings' ? 'Bookings' :
+           activeSection === 'earnings' ? 'Earnings' :
+           activeSection === 'qr-codes' ? 'QR Codes' : 'Overview'}
         </h2>
 
         {/* Overview Section */}
         {activeSection === 'overview' && (
           <div style={styles.listingsSection}>
-            <h3 style={styles.sectionTitle}>Your Listings</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={styles.sectionTitle}>Your Listings</h3>
+              <button
+                onClick={() => setShowFilter(true)}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: '#d72d6e',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+              >
+                <FontAwesomeIcon icon={faFilter} /> Filter
+              </button>
+            </div>
+
             <div style={styles.searchContainer}>
               <input
                 type="text"
@@ -766,51 +510,19 @@ const HostDashboard = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+
             <div style={styles.listingsContainer}>
               {filteredListings.length === 0 ? (
                 <p>No listings found. Create your first listing!</p>
               ) : (
                 filteredListings.map((listing) => {
                   const suggestions = generateSuggestions(listing);
-
-                  // Resolve listing status style
                   let statusStyle = { ...styles.listingStatusBase };
-                  if (listing.status === 'active') {
-                    statusStyle = {
-                      ...styles.listingStatusBase,
-                      ...styles.listingStatusActive,
-                    };
-                  } else if (listing.status === 'inactive') {
-                    statusStyle = {
-                      ...styles.listingStatusBase,
-                      ...styles.listingStatusInactive,
-                    };
-                  } else if (listing.status === 'pending') {
-                    statusStyle = {
-                      ...styles.listingStatusBase,
-                      ...styles.listingStatusPending,
-                    };
-                  } else if (listing.status === 'verified') {
-                    statusStyle = {
-                      ...styles.listingStatusBase,
-                      ...styles.listingStatusVerified,
-                    };
-                  } else if (listing.status === 'rejected') {
-                    statusStyle = {
-                      ...styles.listingStatusBase,
-                      ...styles.listingStatusRejected,
-                    };
-                  }
-
-                  const suggestionsContainerStyle =
-                    suggestions.length > 0
-                      ? styles.suggestionsSimple
-                      : styles.suggestionsSimpleSuccess;
-
-                  const suggestionsStrongStyle =
-                    suggestions.length > 0
-                      ? styles.suggestionsStrong
-                      : styles.suggestionsStrongSuccess;
+                  if (listing.status === 'active') statusStyle = { ...statusStyle, ...styles.listingStatusActive };
+                  else if (listing.status === 'inactive') statusStyle = { ...statusStyle, ...styles.listingStatusInactive };
+                  else if (listing.status === 'pending') statusStyle = { ...statusStyle, ...styles.listingStatusPending };
+                  else if (listing.status === 'verified') statusStyle = { ...statusStyle, ...styles.listingStatusVerified };
+                  else if (listing.status === 'rejected') statusStyle = { ...statusStyle, ...styles.listingStatusRejected };
 
                   return (
                     <div key={listing._id} style={styles.listingCard}>
@@ -820,109 +532,45 @@ const HostDashboard = () => {
                       </div>
 
                       <div style={styles.listingDetails}>
-                        <p>
-                          <strong>Description:</strong> {listing.description}
-                        </p>
-                        <p>
-                          <strong>Price:</strong> ₹{listing.price}
-                        </p>
-                        <p>
-                          <strong>Location:</strong> {listing.location}
-                        </p>
-                        <p>
-                          <strong>Coordinates:</strong> (
-                          {listing.coordinates?.lat || ''},{' '}
-                          {listing.coordinates?.lng || ''})
-                        </p>
-                        <p>
-                          <strong>Max Days Allowed:</strong> {listing.maxdays}
-                        </p>
-                        <p>
-                          <strong>Property Type:</strong>{' '}
-                          {listing.propertyType}
-                        </p>
-                        <p>
-                          <strong>Capacity:</strong> {listing.capacity}
-                        </p>
-                        <p>
-                          <strong>Room Type:</strong> {listing.roomType}
-                        </p>
-                        <p>
-                          <strong>Bedrooms:</strong> {listing.bedrooms}
-                        </p>
-                        <p>
-                          <strong>Beds:</strong> {listing.beds}
-                        </p>
-                        <p>
-                          <strong>Room Size:</strong> {listing.roomSize}
-                        </p>
-                        <p>
-                          <strong>Room Location:</strong>{' '}
-                          {listing.roomLocation || 'Not specified'}
-                        </p>
-                        <p>
-                          <strong>Transport Distance:</strong>{' '}
-                          {listing.transportDistance || 'Not specified'}
-                        </p>
-                        <p>
-                          <strong>Host Gender:</strong>{' '}
-                          {listing.hostGender || 'Not specified'}
-                        </p>
-                        <p>
-                          <strong>Food Facility:</strong>{' '}
-                          {listing.foodFacility || 'Not specified'}
-                        </p>
-                        <p>
-                          <strong>Amenities:</strong>{' '}
-                          {listing.amenities?.join(', ') || 'None'}
-                        </p>
-                        <p>
-                          <strong>Discount:</strong> {listing.discount || 0}%
-                        </p>
-                        <p>
-                          <strong>Likes:</strong> {listing.likes || 0}
-                        </p>
-                        <p>
-                          <strong>Status:</strong> {listing.status}
-                        </p>
-                        <p>
-                          <strong>Booking Available:</strong>{' '}
-                          {listing.booking ? 'Yes' : 'No'}
-                        </p>
-                        <p>
-                          <strong>Reviews:</strong>{' '}
-                          {listing.reviews?.join(', ') || 'None'}
-                        </p>
-                        <p>
-                          <strong>Unavailable Days:</strong>{' '}
-                          {listing.unavailableDates &&
-                          listing.unavailableDates.length > 0
-                            ? listing.unavailableDates.join(', ')
-                            : 'None'}
-                        </p>
-                        <p>
-                          <strong>Created At:</strong>{' '}
-                          {formatDate(listing.createdAt)}
-                        </p>
+                        <p><strong>Description:</strong> {listing.description}</p>
+                        <p><strong>Price:</strong> ₹{listing.price}</p>
+                        <p><strong>Location:</strong> {listing.location}</p>
+                        <p><strong>Coordinates:</strong> ({listing.coordinates?.lat || 'N/A'}, {listing.coordinates?.lng || 'N/A'})</p>
+                        <p><strong>Max Days Allowed:</strong> {listing.maxdays}</p>
+                        <p><strong>Property Type:</strong> {listing.propertyType}</p>
+                        <p><strong>Capacity:</strong> {listing.capacity}</p>
+                        <p><strong>Room Type:</strong> {listing.roomType}</p>
+                        <p><strong>Bedrooms:</strong> {listing.bedrooms}</p>
+                        <p><strong>Beds:</strong> {listing.beds}</p>
+                        <p><strong>Room Size:</strong> {listing.roomSize}</p>
+                        <p><strong>Room Location:</strong> {listing.roomLocation || 'Not specified'}</p>
+                        <p><strong>Transport Distance:</strong> {listing.transportDistance || 'Not specified'}</p>
+                        <p><strong>Host Gender:</strong> {listing.hostGender || 'Not specified'}</p>
+                        <p><strong>Food Facility:</strong> {listing.foodFacility || 'Not specified'}</p>
+                        <p><strong>Amenities:</strong> {listing.amenities?.join(', ') || 'None'}</p>
+                        <p><strong>Discount:</strong> {listing.discount || 0}%</p>
+                        <p><strong>Likes:</strong> {listing.likes || 0}</p>
+                        <p><strong>Status:</strong> {listing.status}</p>
+                        <p><strong>Booking Available:</strong> {listing.booking ? 'Yes' : 'No'}</p>
+                        <p><strong>Reviews:</strong> {listing.reviews?.join(', ') || 'None'}</p>
+                        <p><strong>Unavailable Days:</strong> {listing.unavailableDates && listing.unavailableDates.length > 0 ? listing.unavailableDates.join(', ') : 'None'}</p>
+                        <p><strong>Created At:</strong> {formatDate(listing.createdAt)}</p>
                       </div>
 
-                      <div style={suggestionsContainerStyle}>
-                        <strong style={suggestionsStrongStyle}>
+                      <div style={suggestions.length > 0 ? styles.suggestionsSimple : styles.suggestionsSimpleSuccess}>
+                        <strong style={suggestions.length > 0 ? styles.suggestionsStrong : styles.suggestionsStrongSuccess}>
                           Suggestions:
                         </strong>
                         {suggestions.length > 0 ? (
                           <ul style={styles.suggestionsList}>
-                            {suggestions.map((suggestion, idx) => (
-                              <li key={idx} style={styles.suggestionsListItem}>
-                                <FontAwesomeIcon icon={suggestion.icon} />
-                                {suggestion.message}
+                            {suggestions.map((s, i) => (
+                              <li key={i} style={styles.suggestionsListItem}>
+                                <FontAwesomeIcon icon={s.icon} /> {s.message}
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <p style={{ marginTop: '0.5rem' }}>
-                            Your listing looks great!
-                          </p>
+                          <p style={{ marginTop: '0.5rem' }}>Your listing looks great!</p>
                         )}
                       </div>
 
@@ -931,33 +579,18 @@ const HostDashboard = () => {
                           <strong>Images:</strong>
                           <div style={styles.imageGallery}>
                             {listing.images.map((imgId, idx) => (
-                              <img
-                                key={idx}
-                                src={`${API_BASE_URL}/api/images/${imgId}`}
-                                alt="Listing"
-                                style={styles.listingImage}
-                              />
+                              <img key={idx} src={`${API_BASE_URL}/api/images/${imgId}`} alt="Listing" style={styles.listingImage} />
                             ))}
                           </div>
                         </div>
                       )}
 
                       <div style={styles.listingActions}>
-                        <button
-                          type="button"
-                          style={styles.updateListingBtn}
-                          onClick={() => handleUpdate(listing._id)}
-                        >
-                          <FontAwesomeIcon icon={faEdit} />
-                          Update
+                        <button type="button" style={styles.updateListingBtn} onClick={() => handleUpdate(listing._id)}>
+                          <FontAwesomeIcon icon={faEdit} /> Update
                         </button>
-                        <button
-                          type="button"
-                          style={styles.deleteListingBtn}
-                          onClick={() => handleDelete(listing._id)}
-                        >
-                          <FontAwesomeIcon icon={faTrash} />
-                          Delete
+                        <button type="button" style={styles.deleteListingBtn} onClick={() => handleDelete(listing._id)}>
+                          <FontAwesomeIcon icon={faTrash} /> Delete
                         </button>
                       </div>
                     </div>
@@ -970,17 +603,315 @@ const HostDashboard = () => {
 
         {/* Bookings Section */}
         {activeSection === 'bookings' && (
-          <div style={styles.bookingsSection}>
-            <h3 style={styles.sectionTitle}>Bookings per Month</h3>
-            {renderBookingsChart()}
+          <div style={{ marginTop: '2rem', backgroundColor: 'white', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)', padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#1f2937', marginBottom: '1.5rem' }}>Bookings Analytics</h3>
+            {analytics ? (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                  <div style={{ backgroundColor: '#eff6ff', padding: '1rem', borderRadius: '0.5rem', textAlign: 'center' }}>
+                    <h4 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e40af' }}>{analytics.totalBookings}</h4>
+                    <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>Total Bookings</p>
+                  </div>
+                  <div style={{ backgroundColor: '#dcfce7', padding: '1rem', borderRadius: '0.5rem', textAlign: 'center' }}>
+                    <h4 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#166534' }}>₹{analytics.avgEarningsPerBooking.toFixed(0)}</h4>
+                    <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>Avg. per Booking</p>
+                  </div>
+                </div>
+                <h4 style={{ fontSize: '1rem', fontWeight: 600, color: '#1f2937', marginBottom: '1rem' }}>Monthly Bookings</h4>
+                <div style={{ height: '300px', marginBottom: '2rem' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.monthlyData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="month"
+                        fontSize={12}
+                        angle={-45}
+                        textAnchor="end"
+                        height={60}
+                      />
+                      <YAxis fontSize={12} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#f9fafb',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '0.375rem',
+                          fontSize: '0.875rem'
+                        }}
+                      />
+                      <Bar
+                        dataKey="bookings"
+                        fill="#d72d6e"
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <h4 style={{ fontSize: '1rem', fontWeight: 600, color: '#1f2937', marginBottom: '1rem' }}>Bookings vs Earnings Overview</h4>
+                <div style={{ height: '350px', marginBottom: '1rem' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.monthlyData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="month"
+                        fontSize={12}
+                        angle={-45}
+                        textAnchor="end"
+                        height={60}
+                      />
+                      <YAxis
+                        yAxisId="left"
+                        fontSize={12}
+                        orientation="left"
+                      />
+                      <YAxis
+                        yAxisId="right"
+                        fontSize={12}
+                        orientation="right"
+                        tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}k`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#f9fafb',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '0.375rem',
+                          fontSize: '0.875rem'
+                        }}
+                        formatter={(value, name) => {
+                          if (name === 'earnings') {
+                            return [`₹${value.toLocaleString()}`, 'Earnings'];
+                          }
+                          return [value, 'Bookings'];
+                        }}
+                      />
+                      <Legend />
+                      <Bar
+                        yAxisId="left"
+                        dataKey="bookings"
+                        fill="#d72d6e"
+                        name="Bookings"
+                        radius={[2, 2, 0, 0]}
+                      />
+                      <Bar
+                        yAxisId="right"
+                        dataKey="earnings"
+                        fill="#059669"
+                        name="Earnings"
+                        radius={[2, 2, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : (
+              <p style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>Loading bookings data...</p>
+            )}
           </div>
         )}
 
         {/* Earnings Section */}
         {activeSection === 'earnings' && (
-          <div style={styles.earningsSection}>
-            <h3 style={styles.sectionTitle}>Earnings per Month</h3>
-            {renderEarningsChart()}
+          <div style={{ marginTop: '2rem', backgroundColor: 'white', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)', padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#1f2937', marginBottom: '1.5rem' }}>Earnings Analytics</h3>
+            {analytics ? (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                  <div style={{ backgroundColor: '#fef3c7', padding: '1rem', borderRadius: '0.5rem', textAlign: 'center' }}>
+                    <h4 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#92400e' }}>₹{analytics.totalEarnings.toLocaleString()}</h4>
+                    <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>Total Earnings</p>
+                  </div>
+                  <div style={{ backgroundColor: '#e0e7ff', padding: '1rem', borderRadius: '0.5rem', textAlign: 'center' }}>
+                    <h4 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#3730a3' }}>₹{analytics.avgEarningsPerBooking.toFixed(0)}</h4>
+                    <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>Avg. per Booking</p>
+                  </div>
+                </div>
+                <h4 style={{ fontSize: '1rem', fontWeight: 600, color: '#1f2937', marginBottom: '1rem' }}>Monthly Earnings</h4>
+                <div style={{ height: '300px', marginBottom: '1rem' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.monthlyData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="month"
+                        fontSize={12}
+                        angle={-45}
+                        textAnchor="end"
+                        height={60}
+                      />
+                      <YAxis
+                        fontSize={12}
+                        tickFormatter={(value) => `₹${value.toLocaleString()}`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#f9fafb',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '0.375rem',
+                          fontSize: '0.875rem'
+                        }}
+                        formatter={(value) => [`₹${value.toLocaleString()}`, 'Earnings']}
+                      />
+                      <Bar
+                        dataKey="earnings"
+                        fill="#059669"
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : (
+              <p style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>Loading earnings data...</p>
+            )}
+          </div>
+        )}
+
+        {/* QR Codes Section */}
+        {activeSection === 'qr-codes' && (
+          <div style={{ marginTop: '2rem', backgroundColor: 'white', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)', padding: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#1f2937', marginBottom: '0.5rem' }}>Listing QR Codes</h3>
+                <p style={{ color: '#6b7280', margin: 0 }}>
+                  Generate QR codes for your listings. When scanned, users will be taken directly to your listing page.
+                </p>
+              </div>
+              <button
+                onClick={clearAllQRCodes}
+                style={{
+                  padding: '0.5rem 1rem',
+                  backgroundColor: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem'
+                }}
+              >
+                Clear All QR Codes
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+              {listings.map((listing) => (
+                <div key={listing._id} style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>{listing.title}</h4>
+                  <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1rem' }}>{listing.location}</p>
+
+                  {qrCodes[listing._id] ? (
+                    <div style={{ textAlign: 'center' }}>
+                      <img
+                        src={qrCodes[listing._id].qrCode}
+                        alt="QR Code"
+                        style={{ width: '150px', height: '150px', marginBottom: '1rem' }}
+                      />
+                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => downloadQRCode(listing._id, listing.title)}
+                          style={{
+                            padding: '0.5rem 1rem',
+                            backgroundColor: '#d72d6e',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.375rem',
+                            cursor: 'pointer',
+                            fontSize: '0.875rem'
+                          }}
+                        >
+                          <FontAwesomeIcon icon={faImages} style={{ marginRight: '0.5rem' }} />
+                          Download
+                        </button>
+                        <button
+                          onClick={() => shareQRCode(listing._id)}
+                          style={{
+                            padding: '0.5rem 1rem',
+                            backgroundColor: '#059669',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.375rem',
+                            cursor: 'pointer',
+                            fontSize: '0.875rem'
+                          }}
+                        >
+                          <FontAwesomeIcon icon={faImages} style={{ marginRight: '0.5rem' }} />
+                          Share
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => generateQRCode(listing._id)}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        backgroundColor: '#f3f4f6',
+                        color: '#374151',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '0.375rem',
+                        cursor: 'pointer',
+                        fontSize: '1rem'
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faImages} style={{ marginRight: '0.5rem' }} />
+                      Generate QR Code
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Filter Menu */}
+        {showFilter && (
+          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '2.5rem', width: '90%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}>
+              <button onClick={() => setShowFilter(false)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', fontSize: '2rem', cursor: 'pointer', color: '#666' }}>
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+              <h3 style={{ textAlign: 'center', color: '#d72d6e', fontSize: '1.8rem', marginBottom: '2rem' }}>Filter Your Listings</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
+                <input type="text" placeholder="Title" value={filters.title} onChange={e => setFilters(prev => ({ ...prev, title: e.target.value }))} style={{ padding: '0.9rem', borderRadius: '8px', border: '1px solid #ddd' }} />
+                <input type="text" placeholder="Location" value={filters.location} onChange={e => setFilters(prev => ({ ...prev, location: e.target.value }))} style={{ padding: '0.9rem', borderRadius: '8px', border: '1px solid #ddd' }} />
+                <input type="number" placeholder="Min Price" value={filters.minPrice} onChange={e => setFilters(prev => ({ ...prev, minPrice: e.target.value }))} style={{ padding: '0.9rem', borderRadius: '8px', border: '1px solid #ddd' }} />
+                <input type="number" placeholder="Max Price" value={filters.maxPrice} onChange={e => setFilters(prev => ({ ...prev, maxPrice: e.target.value }))} style={{ padding: '0.9rem', borderRadius: '8px', border: '1px solid #ddd' }} />
+                <select value={filters.status} onChange={e => setFilters(prev => ({ ...prev, status: e.target.value }))} style={{ padding: '0.9rem', borderRadius: '8px', border: '1px solid #ddd' }}>
+                  <option value="all">All Status</option>
+                  <option value="pending">Pending</option>
+                  <option value="verified">Verified</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+                <select value={filters.propertyType} onChange={e => setFilters(prev => ({ ...prev, propertyType: e.target.value }))} style={{ padding: '0.9rem', borderRadius: '8px', border: '1px solid #ddd' }}>
+                  <option value="">Any Property Type</option>
+                  <option>PG</option><option>House</option><option>Villa</option><option>Apartment</option><option>Cottage</option>
+                </select>
+                <select value={filters.roomType} onChange={e => setFilters(prev => ({ ...prev, roomType: e.target.value }))} style={{ padding: '0.9rem', borderRadius: '8px', border: '1px solid #ddd' }}>
+                  <option value="">Any Room Type</option>
+                  <option>Any</option><option>Shared</option><option>Full</option>
+                </select>
+                <select value={filters.hostGender} onChange={e => setFilters(prev => ({ ...prev, hostGender: e.target.value }))} style={{ padding: '0.9rem', borderRadius: '8px', border: '1px solid #ddd' }}>
+                  <option value="">Any Host Gender</option>
+                  <option>Male</option><option>Female</option>
+                </select>
+                <select value={filters.foodFacility} onChange={e => setFilters(prev => ({ ...prev, foodFacility: e.target.value }))} style={{ padding: '0.9rem', borderRadius: '8px', border: '1px solid #ddd' }}>
+                  <option value="">Any Food Facility</option>
+                  <option>Not Available</option><option>Vegetarian</option><option>Non-Vegetarian</option><option>Both</option>
+                </select>
+                <select value={filters.roomSize} onChange={e => setFilters(prev => ({ ...prev, roomSize: e.target.value }))} style={{ padding: '0.9rem', borderRadius: '8px', border: '1px solid #ddd' }}>
+                  <option value="">Any Room Size</option>
+                  <option>Small</option><option>Medium</option><option>Large</option>
+                </select>
+                <input type="number" placeholder="Min Capacity" value={filters.capacity} onChange={e => setFilters(prev => ({ ...prev, capacity: e.target.value }))} style={{ padding: '0.9rem', borderRadius: '8px', border: '1px solid #ddd' }} />
+                <input type="number" placeholder="Min Bedrooms" value={filters.bedrooms} onChange={e => setFilters(prev => ({ ...prev, bedrooms: e.target.value }))} style={{ padding: '0.9rem', borderRadius: '8px', border: '1px solid #ddd' }} />
+                <input type="number" placeholder="Min Beds" value={filters.beds} onChange={e => setFilters(prev => ({ ...prev, beds: e.target.value }))} style={{ padding: '0.9rem', borderRadius: '8px', border: '1px solid #ddd' }} />
+              </div>
+              <div style={{ marginTop: '2rem', textAlign: 'center' }}>
+                <button onClick={() => { setFilters({ title: '', location: '', minPrice: '', maxPrice: '', status: 'all', propertyType: '', roomType: '', hostGender: '', foodFacility: '', roomSize: '', capacity: '', bedrooms: '', beds: '' }); setShowFilter(false); }} style={{ marginRight: '1rem', padding: '0.9rem 2rem', backgroundColor: '#e5e7eb', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>
+                  Clear All
+                </button>
+                <button onClick={() => setShowFilter(false)} style={{ padding: '0.9rem 2rem', backgroundColor: '#d72d6e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>
+                  Apply Filters
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

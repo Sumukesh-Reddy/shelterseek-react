@@ -151,7 +151,7 @@ const AdminNavbar = () => {
     <header style={styles.navbar}>
       <nav style={styles.navWrapper}>
         <ul style={styles.list}>
-          <NavItem to="/admin_index" icon={faTachometerAlt} label="Dashboard" />
+          <NavItem to="/admindashboard" icon={faTachometerAlt} label="Dashboard" />
           <NavItem to="/admin_host-requests" icon={faBed} label="Host" />
           <NavItem to="/admin_map" icon={faChartLine} label="Maps" />
 
