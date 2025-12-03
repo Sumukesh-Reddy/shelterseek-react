@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useDispatch } from "react-redux";
+import { setUser } from "../../store/slices/userSlice";
 import './Login.css';
 
 const TravelerLogin = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch(); // Added
   const [step, setStep] = useState(1); // 1: email/password, 2: OTP verification
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -103,6 +106,16 @@ const TravelerLogin = () => {
       
       localStorage.setItem('token', loginData.token);
       localStorage.setItem('user', JSON.stringify(loginData.user));
+      
+      dispatch(setUser({
+        _id: loginData.user._id,
+        firstname: loginData.user.firstname,
+        lastname: loginData.user.lastname,
+        email: loginData.user.email,
+        profilePhoto: loginData.user.profilePhoto,
+        accountType: loginData.user.accountType
+      }));
+      
       
       // Also store in sessionStorage for consistency with profile page
       sessionStorage.setItem('currentUser', JSON.stringify({
@@ -283,4 +296,3 @@ const TravelerLogin = () => {
 };
 
 export default TravelerLogin;
-
