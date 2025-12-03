@@ -104,15 +104,16 @@
   }
   
   .admin-dashboard-card-label {
-    font-size: 12px;
+    font-size: 18px;
     text-transform: uppercase;
     letter-spacing: 1.5px;
-    color: var(--text-secondary);
-    margin-bottom: 6px;
+    color: #1f1f1f
+    /* margin-bottom: 6px; */
   }
   
   .admin-dashboard-main-number {
-    font-size: 40px;
+    font-size: 60px;
+    font-weight: 600px;
     font-weight: 800;
     background: var(--gradient-accent);
     -webkit-background-clip: text;
@@ -121,7 +122,7 @@
   
   .admin-dashboard-meta-line {
     font-size: 14px;
-    color: var(--text-secondary);
+    color: #1f1f1f
   }
   
   /* --------------------------------------
