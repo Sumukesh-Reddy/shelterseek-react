@@ -437,11 +437,12 @@ function AdminDashboard() {
                     <th>#</th>
                     <th>Booking ID</th>
                     <th>Guest Name</th>
+                    <th>Guest Email</th>
                     <th>Room</th>
                     <th>Check-In</th>
                     <th>Check-Out</th>
                     <th>Total Cost</th>
-                    <th>Guest Email</th>
+                    {/* <th>Guest Email</th> */}
                   </tr>
                 </thead>
                 <tbody>
@@ -457,6 +458,7 @@ function AdminDashboard() {
                           {booking.userName}
                         </div>
                       </td>
+                      <td>{booking.userEmail || 'N/A'}</td>
                       <td>
                         {booking.roomTitle ? (
                           <div>
@@ -511,7 +513,7 @@ function AdminDashboard() {
                             '0'}
                         </div>
                       </td>
-                      <td>{booking.userEmail || 'N/A'}</td>
+                      {/* <td>{booking.userEmail || 'N/A'}</td> */}
                     </tr>
                   ))}
                 </tbody>
