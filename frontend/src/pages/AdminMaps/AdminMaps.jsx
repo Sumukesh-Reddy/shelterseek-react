@@ -15,13 +15,11 @@ const AdminMaps = () => {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Main function to fetch and process hosts with room counts
   const fetchHostsData = async () => {
     setLoading(true);
     setError(null);
     
     try {
-      // First, fetch all hosts using the dedicated hosts endpoint
       const hostsResponse = await fetch('http://localhost:3001/api/hosts');
       
       if (!hostsResponse.ok) {
@@ -31,17 +29,13 @@ const AdminMaps = () => {
       const hostsData = await hostsResponse.json();
       console.log('Hosts API response:', hostsData);
       
-      // Process hosts data - handle different response structures
       let hostsArray = [];
       
       if (Array.isArray(hostsData)) {
-        // If response is directly an array
         hostsArray = hostsData;
       } else if (hostsData && Array.isArray(hostsData.hosts)) {
-        // If response has a 'hosts' property that's an array
         hostsArray = hostsData.hosts;
       } else if (hostsData && Array.isArray(hostsData.data)) {
-        // If response has a 'data' property that's an array
         hostsArray = hostsData.data;
       } else {
         console.warn('Unexpected hosts data structure:', hostsData);
@@ -49,16 +43,11 @@ const AdminMaps = () => {
       
       console.log('Extracted hosts array:', hostsArray);
       
-      // Filter to ensure we only have actual hosts
-      // Based on backend, the /api/hosts endpoint should only return hosts
-      // But we add an extra safety filter
       const filteredHosts = hostsArray.filter(host => {
-        // Check if it's a host based on available fields
         const isHost = 
           host.accountType === 'host' ||
           host.role === 'host' ||
           host.userType === 'host' ||
-          // If no accountType field but from /api/hosts endpoint, assume it's a host
           (!host.accountType && !host.role && !host.userType);
         
         if (!isHost) {
@@ -70,7 +59,6 @@ const AdminMaps = () => {
       
       console.log('Filtered hosts:', filteredHosts);
       
-      // Now fetch rooms to calculate room counts
       const roomsResponse = await fetch('http://localhost:3001/api/rooms');
       
       if (!roomsResponse.ok) {
@@ -80,7 +68,6 @@ const AdminMaps = () => {
       const roomsData = await roomsResponse.json();
       console.log('Rooms API response:', roomsData);
       
-      // Process rooms data
       let roomsArray = [];
       
       if (Array.isArray(roomsData)) {
@@ -91,7 +78,6 @@ const AdminMaps = () => {
       
       console.log('Total rooms found:', roomsArray.length);
       
-      // Calculate room count for each host by matching email
       const hostsWithRoomCounts = filteredHosts.map(host => {
         const hostEmail = host.email || host.userEmail;
         
@@ -106,13 +92,11 @@ const AdminMaps = () => {
           };
         }
         
-        // Calculate room count by matching host email with room email
         const roomCount = roomsArray.filter(room => {
           const roomEmail = room.email || room.hostEmail || room.ownerEmail;
           
           if (!roomEmail) return false;
           
-          // Case-insensitive email comparison
           return roomEmail.toLowerCase().trim() === hostEmail.toLowerCase().trim();
         }).length;
         
@@ -127,7 +111,6 @@ const AdminMaps = () => {
         };
       });
       
-      // Sort hosts by room count (descending) for better display
       const sortedHosts = hostsWithRoomCounts.sort((a, b) => b.roomCount - a.roomCount);
       
       console.log('Final hosts with room counts:', sortedHosts);
@@ -137,7 +120,6 @@ const AdminMaps = () => {
       console.error('Error fetching data:', err);
       setError(err.message);
       
-      // Fallback: Try alternative endpoint if main one fails
       try {
         console.log('Trying fallback endpoint...');
         const fallbackResponse = await fetch('http://localhost:3001/api/users?accountType=host');
@@ -152,7 +134,6 @@ const AdminMaps = () => {
             fallbackArray = fallbackData.data;
           }
           
-          // Provide hosts with 0 room counts as fallback
           const fallbackHosts = fallbackArray.map(host => ({
             ...host,
             _id: host._id || host.id || `host-${Date.now()}-${Math.random()}`,
@@ -177,53 +158,122 @@ const AdminMaps = () => {
     fetchHostsData();
   }, []);
 
-  // Filter hosts by search term
   const filteredHosts = hosts.filter(host =>
     (host.name ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (host.email ?? '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // ---------- Inline styles (scoped) ----------
   const styles = {
     container: {
-      maxWidth: 1150,
-      margin: '32px auto',
-      padding: 18,
-      fontFamily: '"Inter", "Poppins", sans-serif',
-      color: '#111827'
+      maxWidth: 1200,
+      margin: '0 auto',
+      padding: isMobile ? 16 : 40,
+      fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      background: '#ffffff',
+      minHeight: '100vh'
+    },
+    header: {
+      textAlign: 'center',
+      marginBottom: 40,
+      position: 'relative'
     },
     title: {
-      fontSize: isMobile ? 20 : 26,
-      fontWeight: 700,
-      marginBottom: 18,
-      textAlign: 'center',
-      color: '#1f2937'
+      fontSize: isMobile ? 28 : 42,
+      fontWeight: 800,
+      background: 'linear-gradient(135deg, #ec4899 0%, #be185d 50%, #9f1239 100%)',
+      WebkitBackgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      backgroundClip: 'text',
+      marginBottom: 12,
+      letterSpacing: '-0.5px',
+      textShadow: '0 2px 20px rgba(236, 72, 153, 0.15)'
+    },
+    subtitle: {
+      fontSize: isMobile ? 14 : 16,
+      color: '#6b7280',
+      fontWeight: 500,
+      opacity: 0.8
     },
     searchSection: {
       display: 'flex',
       justifyContent: 'center',
-      marginBottom: 18
+      marginBottom: 32,
+      position: 'relative'
+    },
+    searchWrapper: {
+      position: 'relative',
+      width: isMobile ? '100%' : 420
     },
     pillInput: {
-      width: isMobile ? '100%' : 340,
-      padding: '12px 18px',
-      borderRadius: 999,
-      border: '1px solid rgba(15,23,42,0.08)',
-      fontSize: 14,
+      width: '100%',
+      padding: '16px 24px 16px 50px',
+      borderRadius: 50,
+      border: '2px solid #f3f4f6',
+      fontSize: 15,
       outline: 'none',
-      boxShadow: '0 6px 18px rgba(2,6,23,0.04)',
-      transition: 'all 0.3s ease'
+      background: '#ffffff',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      color: '#1f2937'
     },
-    pillInputFocus: {
-      boxShadow: '0 6px 18px rgba(2,6,23,0.1)',
-      borderColor: '#4e73df'
+    searchIcon: {
+      position: 'absolute',
+      left: 20,
+      top: '50%',
+      transform: 'translateY(-50%)',
+      color: '#ec4899',
+      fontSize: 18,
+      pointerEvents: 'none'
+    },
+    statsBar: {
+      display: 'grid',
+      gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+      gap: isMobile ? 12 : 20,
+      marginBottom: 32
+    },
+    statCard: {
+      background: '#ffffff',
+      padding: isMobile ? 20 : 28,
+      borderRadius: 20,
+      textAlign: 'center',
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+      border: '1px solid #f3f4f6',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      position: 'relative',
+      overflow: 'hidden'
+    },
+    statCardGlow: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 4,
+      background: 'linear-gradient(90deg, #ec4899, #be185d, #9f1239)',
+      opacity: 0.8
+    },
+    statValue: {
+      fontSize: isMobile ? 32 : 42,
+      fontWeight: 800,
+      background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
+      WebkitBackgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      backgroundClip: 'text',
+      lineHeight: 1.2,
+      marginBottom: 8
+    },
+    statLabel: {
+      fontSize: isMobile ? 13 : 14,
+      color: '#9f1239',
+      fontWeight: 600,
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px'
     },
     tableWrap: {
       overflowX: 'auto',
-      borderRadius: 12,
-      boxShadow: '0 10px 30px rgba(2,6,23,0.06)',
-      background: 'white',
-      marginTop: 20
+      borderRadius: 24,
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+      background: '#ffffff',
+      border: '1px solid #f3f4f6'
     },
     table: {
       width: '100%',
@@ -231,151 +281,177 @@ const AdminMaps = () => {
       borderCollapse: 'collapse'
     },
     thead: {
-      background: 'linear-gradient(90deg,#4e73df,#6f8afe)',
+      background: 'linear-gradient(135deg, #ec4899 0%, #be185d 50%, #9f1239 100%)',
       color: '#fff'
     },
     th: {
-      padding: '14px 18px',
+      padding: '18px 24px',
       textAlign: 'left',
-      fontSize: 14,
-      letterSpacing: 0.2,
-      fontWeight: 600
+      fontSize: 13,
+      letterSpacing: '0.8px',
+      fontWeight: 700,
+      textTransform: 'uppercase',
+      borderBottom: '3px solid rgba(255, 255, 255, 0.2)'
     },
     td: {
-      padding: '12px 18px',
-      borderBottom: '1px solid rgba(15,23,42,0.04)',
-      fontSize: 14,
+      padding: '18px 24px',
+      borderBottom: '1px solid #f3f4f6',
+      fontSize: 15,
       color: '#374151'
     },
     trHover: {
-      transition: 'background 0.18s',
+      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+      cursor: 'pointer',
+      willChange: 'background'
     },
     btnView: {
-      background: 'linear-gradient(90deg,#10b981,#06b6d4)',
+      background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
       color: 'white',
-      padding: '8px 12px',
-      borderRadius: 8,
+      padding: '10px 24px',
+      borderRadius: 50,
       border: 'none',
       cursor: 'pointer',
-      fontWeight: 600,
-      boxShadow: '0 8px 20px rgba(16,185,129,0.12)',
-      transition: 'all 0.2s ease',
-      fontSize: 13
-    },
-    btnViewHover: {
-      transform: 'translateY(-1px)',
-      boxShadow: '0 10px 25px rgba(16,185,129,0.2)'
-    },
-    emptyMsg: {
-      textAlign: 'center',
-      padding: 22,
-      color: '#6b7280',
-      fontSize: 15
+      fontWeight: 700,
+      fontSize: 13,
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+      boxShadow: '0 8px 24px rgba(236, 72, 153, 0.35)',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      position: 'relative',
+      overflow: 'hidden'
     },
     mobileCard: {
-      background: 'white',
-      borderRadius: 12,
-      padding: 14,
-      marginBottom: 12,
-      boxShadow: '0 8px 22px rgba(2,6,23,0.06)',
-      transition: 'transform 0.2s ease'
+      background: '#ffffff',
+      borderRadius: 20,
+      padding: 20,
+      marginBottom: 16,
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+      border: '1px solid #f3f4f6',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      position: 'relative',
+      overflow: 'hidden'
     },
-    mobileCardHover: {
-      transform: 'translateY(-2px)',
-      boxShadow: '0 12px 28px rgba(2,6,23,0.1)'
+    mobileCardBorder: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 4,
+      background: 'linear-gradient(90deg, #ec4899, #be185d)',
+      opacity: 0.6
     },
     mobileRow: {
       display: 'flex',
       justifyContent: 'space-between',
-      marginBottom: 8
+      alignItems: 'flex-start',
+      marginBottom: 16
     },
     label: { 
       fontWeight: 700, 
-      color: '#111827',
-      fontSize: 13,
-      marginBottom: 2
+      color: '#374151',
+      fontSize: 12,
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+      marginBottom: 6
     },
     value: { 
-      color: '#374151',
-      fontSize: 14
+      color: '#1f2937',
+      fontSize: 15,
+      fontWeight: 500
     },
     loading: {
       textAlign: 'center',
-      padding: 40,
-      color: '#6b7280',
-      fontSize: 16
+      padding: 60,
+      fontSize: 18,
+      color: '#be185d',
+      fontWeight: 500
+    },
+    loadingSpinner: {
+      display: 'inline-block',
+      width: 40,
+      height: 40,
+      border: '4px solid rgba(236, 72, 153, 0.2)',
+      borderTopColor: '#ec4899',
+      borderRadius: '50%',
+      animation: 'spin 0.8s linear infinite',
+      marginBottom: 16
     },
     errorContainer: {
-      background: '#fee',
-      border: '1px solid #fcc',
-      borderRadius: 8,
-      padding: 15,
-      marginBottom: 20,
-      color: '#c00'
+      background: 'linear-gradient(135deg, rgba(254, 226, 226, 0.95) 0%, rgba(252, 165, 165, 0.15) 100%)',
+      border: '2px solid #fca5a5',
+      borderRadius: 20,
+      padding: 24,
+      marginBottom: 24,
+      boxShadow: '0 8px 32px rgba(252, 165, 165, 0.2)'
     },
     errorTitle: {
-      fontWeight: 600,
-      marginBottom: 5
+      fontWeight: 700,
+      marginBottom: 8,
+      color: '#991b1b',
+      fontSize: 16
     },
     retryButton: {
-      background: '#4e73df',
+      background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
       color: 'white',
       border: 'none',
-      padding: '8px 16px',
-      borderRadius: 6,
+      padding: '10px 20px',
+      borderRadius: 50,
       cursor: 'pointer',
-      marginTop: 10,
-      fontSize: 13
-    },
-    statsBar: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      background: '#f8fafc',
-      padding: '12px 18px',
-      borderRadius: 8,
-      marginBottom: 20,
-      border: '1px solid #e2e8f0'
-    },
-    statItem: {
-      textAlign: 'center'
-    },
-    statValue: {
-      fontSize: 20,
+      marginTop: 12,
+      fontSize: 13,
       fontWeight: 700,
-      color: '#4e73df'
-    },
-    statLabel: {
-      fontSize: 12,
-      color: '#64748b',
-      marginTop: 2
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+      boxShadow: '0 4px 16px rgba(236, 72, 153, 0.3)',
+      transition: 'all 0.3s ease'
     },
     roomCountBadge: {
-      display: 'inline-block',
-      padding: '4px 10px',
-      borderRadius: 20,
-      fontSize: 12,
-      fontWeight: 600
+      display: 'inline-flex',
+      alignItems: 'center',
+      padding: '6px 16px',
+      borderRadius: 50,
+      fontSize: 13,
+      fontWeight: 700,
+      letterSpacing: '0.3px',
+      textTransform: 'uppercase'
     },
     roomCountMany: {
-      background: '#d1fae5',
-      color: '#065f46'
+      background: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%)',
+      color: '#9f1239',
+      boxShadow: '0 2px 8px rgba(236, 72, 153, 0.15)'
     },
     roomCountSome: {
-      background: '#fef3c7',
-      color: '#92400e'
+      background: 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)',
+      color: '#be185d',
+      boxShadow: '0 2px 8px rgba(190, 24, 93, 0.12)'
     },
     roomCountNone: {
-      background: '#f3f4f6',
-      color: '#6b7280'
+      background: 'linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%)',
+      color: '#6b7280',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)'
+    },
+    emptyMsg: {
+      textAlign: 'center',
+      padding: 60,
+      color: '#6b7280',
+      fontSize: 16,
+      fontWeight: 500,
+      background: '#ffffff',
+      borderRadius: 20,
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+      border: '1px solid #f3f4f6'
+    },
+    hostName: {
+      fontWeight: 600,
+      color: '#1f2937',
+      fontSize: 15
     }
   };
 
-  // Calculate statistics
   const totalHosts = hosts.length;
   const totalRooms = hosts.reduce((sum, host) => sum + (host.roomCount || 0), 0);
   const hostsWithRooms = hosts.filter(host => (host.roomCount || 0) > 0).length;
 
-  // Get room count badge style
   const getRoomCountStyle = (count) => {
     if (count >= 5) return { ...styles.roomCountBadge, ...styles.roomCountMany };
     if (count >= 1) return { ...styles.roomCountBadge, ...styles.roomCountSome };
@@ -385,68 +461,122 @@ const AdminMaps = () => {
   if (loading) {
     return (
       <div style={styles.container}>
-        <h1 style={styles.title}>Hosts Management</h1>
-        <p style={styles.loading}>Loading hosts and room data...</p>
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+          
+          /* Hide scrollbar for Chrome, Safari and Opera */
+          ::-webkit-scrollbar {
+            display: none;
+          }
+          
+          /* Hide scrollbar for IE, Edge and Firefox */
+          * {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+          }
+        `}</style>
+        <div style={styles.header}>
+          <h1 style={styles.title}>Hosts Management</h1>
+        </div>
+        <div style={styles.loading}>
+          <div style={styles.loadingSpinner}></div>
+          <div>Loading hosts and room data...</div>
+        </div>
       </div>
     );
   }
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>Hosts Management</h1>
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+      
+      <div style={styles.header}>
+        <h1 style={styles.title}>Hosts Management</h1>
+        <p style={styles.subtitle}>Manage and monitor all your property hosts</p>
+      </div>
 
       {error && (
         <div style={styles.errorContainer}>
-          <div style={styles.errorTitle}>Warning</div>
-          <div>{error}</div>
+          <div style={styles.errorTitle}>⚠️ Warning</div>
+          <div style={{ color: '#991b1b' }}>{error}</div>
           <button 
             style={styles.retryButton}
             onClick={fetchHostsData}
+            onMouseEnter={e => e.target.style.transform = 'translateY(-2px)'}
+            onMouseLeave={e => e.target.style.transform = 'translateY(0)'}
           >
-            Retry Loading Data
+            Retry Loading
           </button>
         </div>
       )}
 
-      {/* Statistics Bar */}
       <div style={styles.statsBar}>
-        <div style={styles.statItem}>
+        <div 
+          style={styles.statCard}
+          onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'}
+          onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+        >
+          <div style={styles.statCardGlow}></div>
           <div style={styles.statValue}>{totalHosts}</div>
           <div style={styles.statLabel}>Total Hosts</div>
         </div>
-        <div style={styles.statItem}>
+        <div 
+          style={styles.statCard}
+          onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'}
+          onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+        >
+          <div style={styles.statCardGlow}></div>
           <div style={styles.statValue}>{totalRooms}</div>
           <div style={styles.statLabel}>Total Rooms</div>
         </div>
-        <div style={styles.statItem}>
+        <div 
+          style={styles.statCard}
+          onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'}
+          onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+        >
+          <div style={styles.statCardGlow}></div>
           <div style={styles.statValue}>{hostsWithRooms}</div>
-          <div style={styles.statLabel}>Hosts with Rooms</div>
+          <div style={styles.statLabel}>Active Hosts</div>
         </div>
       </div>
 
       <div style={styles.searchSection}>
-        <input
-          type="text"
-          style={styles.pillInput}
-          placeholder="Search hosts by name or email..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          onFocus={(e) => e.target.style = { ...styles.pillInput, ...styles.pillInputFocus }}
-          onBlur={(e) => e.target.style = styles.pillInput}
-          aria-label="Search hosts by name or email"
-        />
+        <div style={styles.searchWrapper}>
+          <div style={styles.searchIcon}>🔍</div>
+          <input
+            type="text"
+            style={styles.pillInput}
+            placeholder="Search hosts by name or email..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onFocus={(e) => {
+              e.target.style.borderColor = '#ec4899';
+              e.target.style.boxShadow = '0 12px 48px rgba(236, 72, 153, 0.2), 0 4px 12px rgba(0, 0, 0, 0.06)';
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = 'transparent';
+              e.target.style.boxShadow = '0 8px 32px rgba(236, 72, 153, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04)';
+            }}
+            aria-label="Search hosts"
+          />
+        </div>
       </div>
 
       {filteredHosts.length > 0 ? (
-        // Desktop/table view for larger screens
         !isMobile ? (
           <div style={styles.tableWrap}>
-            <table style={styles.table} role="table" aria-label="Hosts table">
+            <table style={styles.table}>
               <thead style={styles.thead}>
                 <tr>
                   <th style={styles.th}>Host Name</th>
                   <th style={styles.th}>Email</th>
-                  <th style={styles.th}>No. of Rooms</th>
+                  <th style={styles.th}>Rooms</th>
                   <th style={styles.th}>Actions</th>
                 </tr>
               </thead>
@@ -455,26 +585,36 @@ const AdminMaps = () => {
                   <tr
                     key={host._id}
                     style={styles.trHover}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(240,245,255,0.6)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = '#fafafa';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
                   >
                     <td style={styles.td}>
-                      <div style={{ fontWeight: 500 }}>{host.name}</div>
+                      <div style={styles.hostName}>{host.name}</div>
                     </td>
                     <td style={styles.td}>
-                      <div style={{ color: '#4b5563', fontSize: 13 }}>{host.email || 'N/A'}</div>
+                      <div style={{ color: '#6b7280', fontSize: 14 }}>{host.email || 'N/A'}</div>
                     </td>
                     <td style={styles.td}>
                       <span style={getRoomCountStyle(host.roomCount)}>
-                        {host.roomCount || 0} rooms
+                        {host.roomCount || 0} {host.roomCount === 1 ? 'room' : 'rooms'}
                       </span>
                     </td>
                     <td style={styles.td}>
                       <button
                         style={styles.btnView}
                         onClick={() => navigate(`/admin/maps/${encodeURIComponent(host.email)}`)}
-                        onMouseEnter={e => e.target.style = { ...styles.btnView, ...styles.btnViewHover }}
-                        onMouseLeave={e => e.target.style = styles.btnView}
+                        onMouseEnter={e => {
+                          e.target.style.transform = 'translateY(-2px)';
+                          e.target.style.boxShadow = '0 12px 32px rgba(236, 72, 153, 0.45)';
+                        }}
+                        onMouseLeave={e => {
+                          e.target.style.transform = 'translateY(0)';
+                          e.target.style.boxShadow = '0 8px 24px rgba(236, 72, 153, 0.35)';
+                        }}
                         aria-label={`View map for ${host.name}`}
                       >
                         View Map
@@ -486,51 +626,58 @@ const AdminMaps = () => {
             </table>
           </div>
         ) : (
-          // Mobile card view
           <div>
-            {filteredHosts.map((host, index) => (
+            {filteredHosts.map(host => (
               <div 
                 key={host._id} 
                 style={styles.mobileCard}
-                onMouseEnter={e => e.currentTarget.style = { ...styles.mobileCard, ...styles.mobileCardHover }}
-                onMouseLeave={e => e.currentTarget.style = styles.mobileCard}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-4px)';
+                  e.currentTarget.style.boxShadow = '0 16px 48px rgba(236, 72, 153, 0.2), 0 4px 12px rgba(0, 0, 0, 0.08)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 10px 40px rgba(236, 72, 153, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04)';
+                }}
               >
+                <div style={styles.mobileCardBorder}></div>
                 <div style={styles.mobileRow}>
                   <div>
                     <div style={styles.label}>Host</div>
-                    <div style={styles.value}>{host.name}</div>
+                    <div style={{ ...styles.value, fontWeight: 600 }}>{host.name}</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={styles.label}>Rooms</div>
-                    <div style={styles.value}>
-                      <span style={getRoomCountStyle(host.roomCount)}>
-                        {host.roomCount || 0}
-                      </span>
-                    </div>
+                    <span style={getRoomCountStyle(host.roomCount)}>
+                      {host.roomCount || 0}
+                    </span>
                   </div>
                 </div>
-                <div style={{ marginBottom: 8 }}>
+                <div style={{ marginBottom: 16 }}>
                   <div style={styles.label}>Email</div>
                   <div style={{ ...styles.value, fontSize: 13 }}>{host.email || 'N/A'}</div>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-                  <button
-                    style={styles.btnView}
-                    onClick={() => navigate(`/admin/maps/${encodeURIComponent(host.email)}`)}
-                    onMouseEnter={e => e.target.style = { ...styles.btnView, ...styles.btnViewHover }}
-                    onMouseLeave={e => e.target.style = styles.btnView}
-                    aria-label={`View map for ${host.name}`}
-                  >
-                    View Map
-                  </button>
-                </div>
+                <button
+                  style={{ ...styles.btnView, width: '100%', justifyContent: 'center', display: 'flex' }}
+                  onClick={() => navigate(`/admin/maps/${encodeURIComponent(host.email)}`)}
+                  onMouseEnter={e => {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 12px 32px rgba(236, 72, 153, 0.45)';
+                  }}
+                  onMouseLeave={e => {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 8px 24px rgba(236, 72, 153, 0.35)';
+                  }}
+                >
+                  View Map
+                </button>
               </div>
             ))}
           </div>
         )
       ) : (
         <div style={styles.emptyMsg}>
-          {searchTerm ? 'No hosts match your search.' : 'No hosts found.'}
+          {searchTerm ? '🔍 No hosts match your search.' : '📋 No hosts found.'}
         </div>
       )}
     </div>
