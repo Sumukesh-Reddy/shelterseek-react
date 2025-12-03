@@ -177,7 +177,7 @@ const hostLoginSchema = new mongoose.Schema(
     },
     hostBookings: [bookingSchema] // Add bookings array for hosts
   },
-  { 
+  {
     collection: 'LoginData'
   }
 );
