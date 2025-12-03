@@ -1,123 +1,97 @@
-/* components/IntroAnimation/IntroAnimation.css */
+.intro-wrapper {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(128, 133, 138, 0.3);
+  backdrop-filter: blur(20px);
+  z-index: 9999;
+  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 1;
+}
 
-/* Container covers the whole screen */
-.intro-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: linear-gradient(135deg, #2c3e50 0%, #1a1a1a 100%);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999; /* Very high z-index to sit on top of everything */
-    perspective: 1200px;
-    transition: opacity 1s ease;
+.intro-title {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  transform: translate3d(0, 0, 0) scale(1);
+  opacity: 1;
+  transition:
+    transform 0.9s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity;
+}
+
+.intro-title span:first-child {
+  font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+  color: #ec055d;
+  font-size: 72px;
+}
+
+.intro-title span:nth-child(2) {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #d72d6e;
+  font-size: 52px;
+}
+
+.intro-title span:nth-child(3) {
+  font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+  color: #ec055d;
+  font-size: 72px;
+  margin-left: 5px;
+}
+
+.intro-title span:last-child {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #d72d6e;
+  font-size: 52px;
+}
+
+.intro-wrapper.center .intro-title {
+  transform: translate3d(0, 0, 0) scale(1);
+  opacity: 1;
+}
+
+.intro-wrapper.left .intro-title {
+  transform: translate3d(-42vw, -46vh, 0) scale(0.4);
+  opacity: 0.95;
+}
+
+.intro-wrapper.hide .intro-title {
+  transform: translate3d(-42vw, -46vh, 0) scale(0.4);
+  opacity: 0;
+}
+
+.intro-wrapper.hide {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 1004px) {
+  .intro-title {
+    font-size: 48px;
   }
   
-  .intro-container.fade-out {
-    opacity: 0;
-    pointer-events: none;
+  .intro-title span:first-child,
+  .intro-title span:nth-child(3) {
+    font-size: 54px;
   }
   
-  /* Door Scene */
-  .door-scene {
-    position: relative;
-    width: 240px;
-    height: 360px;
-    transform-style: preserve-3d;
-    cursor: pointer;
+  .intro-title span:nth-child(2),
+  .intro-title span:last-child {
+    font-size: 40px;
   }
   
-  /* The Room Inside (Warm Light) */
-  .room-reveal {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: radial-gradient(circle at center, #fff9c4 0%, #ffffff 80%);
-    border: 1px solid #ddd;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    border-radius: 2px;
-    box-shadow: inset 0 0 20px rgba(0,0,0,0.1);
-    z-index: 1;
+  .intro-wrapper.left .intro-title {
+    transform: translate3d(-42vw, -46vh, 0) scale(0.28);
   }
   
-  .reveal-logo {
-    font-size: 1.8rem;
-    color: #5D4037;
-    font-weight: bold;
-    opacity: 0;
-    transform: scale(0.8);
-    transition: all 0.5s 0.3s;
+  .intro-wrapper.hide .intro-title {
+    transform: translate3d(-42vw, -46vh, 0) scale(0.28);
   }
-  
-  /* The Door */
-  .door {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: #5D4037;
-    background-image: linear-gradient(90deg, 
-        rgba(255,255,255,0.1) 0%, 
-        rgba(255,255,255,0) 20%, 
-        rgba(0,0,0,0.2) 100%);
-    border: 8px solid #3E2723;
-    transform-origin: left;
-    transition: transform 1.5s cubic-bezier(0.25, 1, 0.5, 1);
-    z-index: 2;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    box-shadow: 10px 10px 30px rgba(0,0,0,0.5);
-  }
-  
-  .door-panel {
-    width: 80%;
-    height: 90%;
-    border: 4px solid #3E2723;
-    box-shadow: inset 2px 2px 5px rgba(0,0,0,0.4);
-  }
-  
-  .knob {
-    position: absolute;
-    right: 20px;
-    top: 50%;
-    width: 16px;
-    height: 16px;
-    background: #FFD700;
-    border-radius: 50%;
-    box-shadow: 1px 1px 3px rgba(0,0,0,0.4);
-  }
-  
-  .click-hint {
-    position: absolute;
-    bottom: -50px;
-    width: 100%;
-    text-align: center;
-    color: rgba(255,255,255,0.6);
-    font-size: 0.9rem;
-    animation: pulse 2s infinite;
-  }
-  
-  @keyframes pulse {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 1; }
-  }
-  
-  /* Animation Classes */
-  .door-scene.open .door {
-    transform: rotateY(-105deg);
-  }
-  
-  .door-scene.open .reveal-logo {
-    opacity: 1;
-    transform: scale(1);
-  }
+}

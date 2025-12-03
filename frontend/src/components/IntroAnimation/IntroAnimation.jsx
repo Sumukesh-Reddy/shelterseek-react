@@ -1,45 +1,37 @@
-// components/IntroAnimation/IntroAnimation.jsx
-import React, { useState } from 'react';
-import './IntroAnimation.css';
+import React, { useEffect, useState } from "react";
+import "./IntroAnimation.css";
 
 const IntroAnimation = ({ onComplete }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isFading, setIsFading] = useState(false);
+  const [phase, setPhase] = useState("center");
 
-  const handleOpen = () => {
-    // 1. Trigger the door opening animation
-    setIsOpen(true);
+  useEffect(() => {
+    const t1 = setTimeout(() => {
+      setPhase("left");
+    }, 900); // Stay centered for 0.9s
+    
+    const t2 = setTimeout(() => {
+      setPhase("hide");
+    }, 1800); // Stay in navbar position for 0.9s
+    
+    const t3 = setTimeout(() => {
+      onComplete && onComplete();
+    }, 2200); // Clean up after fade
 
-    // 2. Wait for the door to open (1.2s), then fade out the container
-    setTimeout(() => {
-      setIsFading(true);
-      
-      // 3. Wait for the fade out (1s), then tell Parent (HomePage) we are done
-      setTimeout(() => {
-        onComplete();
-      }, 1000);
-    }, 1200);
-  };
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [onComplete]);
 
   return (
-    <div className={`intro-container ${isFading ? 'fade-out' : ''}`}>
-      <div 
-        className={`door-scene ${isOpen ? 'open' : ''}`} 
-        onClick={handleOpen}
-      >
-        {/* The Reveal (Inside the door) */}
-        <div className="room-reveal">
-          <div className="reveal-logo">ShelterSeek</div>
-        </div>
-
-        {/* The Door */}
-        <div className="door">
-          <div className="door-panel"></div>
-          <div class="knob"></div>
-        </div>
-
-        <div className="click-hint">Click to Enter</div>
-      </div>
+    <div className={`intro-wrapper ${phase}`}>
+      <h1 className="intro-title">
+        <span>S</span>
+        <span>helter</span>
+        <span>S</span>
+        <span>eek</span>
+      </h1>
     </div>
   );
 };
