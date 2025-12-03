@@ -152,44 +152,15 @@ const AdminNavbar = () => {
       <nav style={styles.navWrapper}>
         <ul style={styles.list}>
           <NavItem to="/admindashboard" icon={faTachometerAlt} label="Dashboard" />
-          <NavItem to="/admin_host-requests" icon={faBed} label="Host" />
+          <NavItem to="/admin/hostrequests" icon={faBed} label="Host" />
           <NavItem to="/admin_map" icon={faChartLine} label="Maps" />
 
-          {/* 🔥 New Trends item in main navbar */}
+        
           <NavItem to="/admin_trends" icon={faFire} label="Trends" />
 
           <NavItem to="/admin_notifications" icon={faBell} label="Users" />
 
-          {/* Profile Dropdown */}
-          <li
-            style={styles.dropdown}
-            onMouseEnter={() => setOpenProfile(true)}
-            onMouseLeave={() => setOpenProfile(false)}
-          >
-            <div style={styles.link}>
-              <FontAwesomeIcon icon={faUserCircle} style={styles.icon} />
-              Profile
-              <FontAwesomeIcon icon={faCaretDown} />
-            </div>
-
-            <div style={styles.dropdownMenu}>
-              <DropdownItem
-                to="/admin_account"
-                icon={faUser}
-                label="Account"
-              />
-              <DropdownItem
-                to="/admin_notes"
-                icon={faStickyNote}
-                label="Notes"
-              />
-              <DropdownItem
-                to="/admin_logout"
-                icon={faSignOutAlt}
-                label="Logout"
-              />
-            </div>
-          </li>
+         
         </ul>
       </nav>
     </header>

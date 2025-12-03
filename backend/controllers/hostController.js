@@ -96,9 +96,7 @@ const listingSchema = new mongoose.Schema({
   reviews: [{
     type: String
   }],
-  unavailableDates: [{
-    type: Date
-  }],
+  unavailableDates: [Date],
   createdAt: {
     type: Date,
     default: Date.now
@@ -110,9 +108,11 @@ const listingSchema = new mongoose.Schema({
   id: false
 });
 
+
 // We'll create the model only when connection is ready
 let Listing;
 let gfsBucket;
+let TravelerListing; // model on Admin_Traveler
 
 // Function to initialize models (called from app.js)
 const initializeHostModels = () => {
@@ -125,6 +125,12 @@ const initializeHostModels = () => {
 
   Listing = global.hostAdminConnection.model('Listing', listingSchema);
   gfsBucket = global.gfsBucket;
+
+  // Initialize traveler model if Admin_Traveler connection is present
+  if (global.adminTravelerConnection) {
+    // Reuse EXACT schema, only change the collection to RoomDataTraveler
+    TravelerListing = global.adminTravelerConnection.model('Listing', listingSchema, 'RoomDataTraveler');
+  }
 };
 
 // Create listing
@@ -280,7 +286,7 @@ const updateListing = async (req, res) => {
       }
     };
     
-    // Handle unavailableDates dates
+    // Handle unavailable dates
     if (req.body.unavailableDates) {
       updatedData.unavailableDates = Array.isArray(req.body.unavailableDates)
         ? req.body.unavailableDates.map(date => new Date(date))
@@ -301,6 +307,68 @@ const updateListing = async (req, res) => {
     const listing = await Listing.findByIdAndUpdate(listingId, updatedData, { new: true });
     if (!listing) {
       return res.status(404).json({ success: false, message: 'Listing not found' });
+    }
+
+    // Replicate to Admin_Traveler if listing is verified
+    if (listing.status === 'verified') {
+      try {
+        if (!TravelerListing && global.adminTravelerConnection) {
+          TravelerListing = global.adminTravelerConnection.model('Listing', listingSchema, 'RoomDataTraveler');
+        }
+        if (TravelerListing) {
+          // Get the raw document directly from database to ensure we have all fields
+          const rawDoc = await Listing.findById(listing._id).lean();
+          if (!rawDoc) {
+            console.error(`[Replication] Could not find raw document for listing ${listing._id}`);
+            return;
+          }
+          
+          // Build payload from raw document to ensure we get all fields including unavailableDates
+          const payload = { ...rawDoc };
+          
+          // Explicitly handle unavailableDates - prioritize unavailableDates over availability
+          if (rawDoc.unavailableDates && Array.isArray(rawDoc.unavailableDates) && rawDoc.unavailableDates.length > 0) {
+            // Use unavailableDates directly from raw document
+            payload.unavailableDates = rawDoc.unavailableDates.map(date => {
+              return date instanceof Date ? date : new Date(date);
+            });
+          } else if (rawDoc.availability && Array.isArray(rawDoc.availability) && rawDoc.availability.length > 0) {
+            // Convert old availability field to unavailableDates
+            payload.unavailableDates = rawDoc.availability.map(date => {
+              return date instanceof Date ? date : new Date(date);
+            });
+          } else {
+            // Set empty array if neither field exists
+            payload.unavailableDates = [];
+          }
+          
+          // Always remove availability field to avoid confusion
+          delete payload.availability;
+          
+          // Remove _id from payload if it exists as a nested object (from lean())
+          if (payload._id && typeof payload._id === 'object') {
+            payload._id = payload._id.toString();
+          }
+          
+          // Remove _id from payload for update operation (MongoDB doesn't allow updating _id)
+          const { _id: payloadId, ...updatePayload } = payload;
+          
+          // Use $set to explicitly set all fields and $unset to remove availability
+          const updateOp = {
+            $set: updatePayload,
+            $unset: { availability: "" }
+          };
+          
+          await TravelerListing.findOneAndUpdate(
+            { _id: listing._id },
+            updateOp,
+            { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: false }
+          );
+          console.log(`[Replication] Verified listing ${listing._id} updated in Admin_Traveler.RoomDataTraveler with ${payload.unavailableDates.length} unavailable dates`);
+        }
+      } catch (repErr) {
+        console.error('Replication to Admin_Traveler failed during update:', repErr);
+      }
     }
 
     res.json({
@@ -396,6 +464,16 @@ const updateListingStatus = async (req, res) => {
     if (!Listing) initializeHostModels();
 
     const { status } = req.body;
+    if (!status) {
+      return res.status(400).json({ success: false, message: 'Status is required' });
+    }
+
+    // Validate status value
+    const validStatuses = ['pending', 'verified', 'rejected'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status value' });
+    }
+
     const listing = await Listing.findByIdAndUpdate(
       req.params.listingId,
       { status },
@@ -406,16 +484,111 @@ const updateListingStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Listing not found' });
     }
 
-    res.json({
-      success: true,
-      message: 'Status updated',
-      data: { listing }
+    // Debug context - check what fields the listing actually has
+    const listingObj = listing.toObject();
+    console.log('[StatusUpdate]', {
+      listingId: req.params.listingId,
+      newStatus: status,
+      adminTravelerConnected: Boolean(global.adminTravelerConnection),
+      adminTravelerState: global.adminTravelerConnection ? global.adminTravelerConnection.readyState : 'N/A',
+      hasUnavailableDates: listingObj.unavailableDates !== undefined,
+      unavailableDatesCount: listingObj.unavailableDates ? listingObj.unavailableDates.length : 0,
+      hasAvailability: listingObj.availability !== undefined,
+      availabilityCount: listingObj.availability ? listingObj.availability.length : 0
     });
 
+    // Replicate to Admin_Traveler when approved; remove on other statuses
+    try {
+      // Check if adminTravelerConnection is ready before attempting to use it
+      if (global.adminTravelerConnection && global.adminTravelerConnection.readyState === 1) {
+        if (!TravelerListing) {
+          TravelerListing = global.adminTravelerConnection.model('Listing', listingSchema, 'RoomDataTraveler');
+        }
+        
+        if (status === 'verified') {
+        // Get the raw document directly from database to ensure we have all fields
+        const rawDoc = await Listing.findById(listing._id).lean();
+        if (!rawDoc) {
+          console.error(`[Replication] Could not find raw document for listing ${listing._id}`);
+          return;
+        }
+        
+        // Build payload from raw document to ensure we get all fields including unavailableDates
+        const payload = { ...rawDoc };
+        
+        // Explicitly handle unavailableDates - prioritize unavailableDates over availability
+        if (rawDoc.unavailableDates && Array.isArray(rawDoc.unavailableDates) && rawDoc.unavailableDates.length > 0) {
+          // Use unavailableDates directly from raw document
+          payload.unavailableDates = rawDoc.unavailableDates.map(date => {
+            // Handle both Date objects and ISO strings
+            return date instanceof Date ? date : new Date(date);
+          });
+        } else if (rawDoc.availability && Array.isArray(rawDoc.availability) && rawDoc.availability.length > 0) {
+          // Convert old availability field to unavailableDates
+          payload.unavailableDates = rawDoc.availability.map(date => {
+            return date instanceof Date ? date : new Date(date);
+          });
+        } else {
+          // Set empty array if neither field exists
+          payload.unavailableDates = [];
+        }
+        
+        // Always remove availability field to avoid confusion
+        delete payload.availability;
+        
+        // Remove _id from payload if it exists as a nested object (from lean())
+        if (payload._id && typeof payload._id === 'object') {
+          payload._id = payload._id.toString();
+        }
+        
+        // Log what's being replicated for debugging
+        console.log('[Replication] Payload preparation:', {
+          rawDocHasUnavailableDates: rawDoc.unavailableDates ? true : false,
+          rawDocUnavailableDatesCount: rawDoc.unavailableDates ? rawDoc.unavailableDates.length : 0,
+          rawDocHasAvailability: rawDoc.availability ? true : false,
+          rawDocAvailabilityCount: rawDoc.availability ? rawDoc.availability.length : 0,
+          payloadHasUnavailableDates: Array.isArray(payload.unavailableDates),
+          payloadUnavailableDatesCount: payload.unavailableDates ? payload.unavailableDates.length : 0,
+          sampleDates: payload.unavailableDates ? payload.unavailableDates.slice(0, 3).map(d => d instanceof Date ? d.toISOString() : String(d)) : []
+        });
+        
+        // Remove _id from payload for update operation (MongoDB doesn't allow updating _id)
+        const { _id, ...updatePayload } = payload;
+        
+        // Use $set to explicitly set all fields and $unset to remove availability
+        const updateOp = {
+          $set: updatePayload,
+          $unset: { availability: "" }
+        };
+        
+        await TravelerListing.findOneAndUpdate(
+          { _id: listing._id },
+          updateOp,
+          { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: false }
+        );
+        console.log(`[Replication] Listing ${listing._id} replicated to Admin_Traveler.RoomDataTraveler with ${payload.unavailableDates.length} unavailable dates`);
+      } else {
+        await TravelerListing.deleteOne({ _id: listing._id });
+        console.log(`[Replication] Listing ${listing._id} removed from Admin_Traveler (status=${status})`);
+      }
+    }
+  } catch (repErr) {
+    // Replication failed, but don't fail the whole request
+    console.error('Replication to Admin_Traveler failed:', repErr.message);
+  }
+
+  res.json({
+    success: true,
+    message: 'Status updated successfully',
+    data: { listing }
+  });
+
   } catch (error) {
+    console.error('Error updating listing status:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to update status'
+      message: 'Failed to update status',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

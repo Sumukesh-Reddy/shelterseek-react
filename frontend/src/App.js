@@ -31,6 +31,7 @@ import AdminTrends from './pages/AdminTrends/AdminTrends';
 import TravelerDetails from './pages/AdminNotifications/TravelerDetails';
 import HotelChatbot  from './pages/HotelChatBot/HotelChatbot';
 import ChatbotIcon from './components/ChatbotIcon/ChatbotIcon';
+import HostRequests from "./pages/HostRequests/HostRequests";
 
 function App() {
   return (
@@ -67,6 +68,8 @@ function App() {
         <Route path="/admin_trends" element={<AdminTrends />} />
         <Route path="/traveler/:email/bookings" element={<TravelerDetails />} />
         <Route path="/chatbot" element={<HotelChatbot />} />
+        <Route path="/admin/hostrequests" element={<HostRequests />} />
+
       </Routes>
     </Router>
   );
