@@ -19,6 +19,10 @@ const adminController = require('./controllers/adminController');
 
 const { Traveler, Host } = require('./model/usermodel');
 const RoomData = require('./model/Room');
+// At the top of app.js with other requires
+const { MongoClient } = require('mongodb');
+const { GoogleGenAI } = require('@google/genai');
+
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -1141,31 +1145,159 @@ app.get('/api/status', (req, res) => {
 
 app.get('/api/new-customers', async (req, res) => {
   try {
-    const customers = await LoginData.find({ accountType: 'traveller' }).lean();
-    res.json({ data: customers });
+    // Fetch latest 5 travelers
+    const travelers = await Traveler.find({ accountType: 'traveller' })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('name email accountType createdAt profilePhoto')
+      .lean();
+
+    // Fetch latest 5 hosts
+    const hosts = await Host.find({ accountType: 'host' })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('name email accountType createdAt profilePhoto')
+      .lean();
+
+    // Combine and sort by creation date (newest first)
+    const allCustomers = [...travelers, ...hosts]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 4); // Take only top 5 newest overall
+
+    // Format the response
+    const formattedCustomers = allCustomers.map(customer => ({
+      id: customer._id,
+      name: customer.name || 'Unknown User',
+      email: customer.email,
+      accountType: customer.accountType === 'traveller' ? 'Traveler' : 'Host',
+      joinedDate: customer.createdAt ? 
+        new Date(customer.createdAt).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        }) : 'Recently',
+      avatar: customer.profilePhoto || 
+        (customer.accountType === 'traveller' ? 
+          'https://ui-avatars.com/api/?name=' + encodeURIComponent(customer.name || 'User') + '&background=4e73df&color=fff' :
+          'https://ui-avatars.com/api/?name=' + encodeURIComponent(customer.name || 'Host') + '&background=1cc88a&color=fff'
+        ),
+      isNew: customer.createdAt ? 
+        (Date.now() - new Date(customer.createdAt).getTime()) < (7 * 24 * 60 * 60 * 1000) : true
+    }));
+
+    res.json({ 
+      success: true,
+      data: formattedCustomers,
+      count: formattedCustomers.length,
+      summary: {
+        travelersCount: travelers.length,
+        hostsCount: hosts.length,
+        totalNewCustomers: formattedCustomers.length
+      }
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Error fetching new customers:', err);
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
   }
 });
 
 app.get('/api/recent-activities', async (req, res) => {
   try {
-    const activities = await Booking.find()
-      .sort({ updatedAt: -1, paymentDate: -1 })
-      .limit(10)
+    const limit = parseInt(req.query.limit) || 5;
+    const allActivities = [];
+
+    // 1. Get recent bookings
+    const bookings = await Booking.find({
+      bookingStatus: { $in: ['confirmed', 'checked_in', 'completed'] }
+    })
+      .sort({ updatedAt: -1 })
+      .limit(limit)
       .lean();
 
-    const formattedActivities = activities.map(a => ({
-      name: a.userName,
-      action: `booked room ${a.roomId}`,
-      email: a.userEmail,
-      updatedAt: a.updatedAt || a.paymentDate,
-    }));
+    for (const booking of bookings) {
+      let roomTitle = 'Room';
+      
+      try {
+        const room = await RoomData.findById(booking.roomId).select('title').lean();
+        if (room?.title) roomTitle = room.title;
+      } catch (err) {
+        console.log(`Could not fetch room ${booking.roomId}:`, err.message);
+      }
+      
+      const bookingId = booking.bookingId || booking._id.toString().substring(0, 8);
+      const date = booking.updatedAt || booking.paymentDate || booking.createdAt;
+      
+      allActivities.push({
+        type: 'booking',
+        id: booking._id,
+        name: booking.userName || 'Guest',
+        action: `Room Booked "${roomTitle}" with ${bookingId}`,
+        email: booking.userEmail,
+        date: date,
+        dateFormatted: date ? new Date(date).toLocaleDateString() : 'N/A',
+        timeFormatted: date ? new Date(date).toLocaleTimeString([], { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        }) : 'N/A',
+        timestamp: date ? new Date(date).getTime() : Date.now()
+      });
+    }
 
-    res.json({ data: formattedActivities });
+    // 2. Get recent room uploads (last 7 days)
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    
+    const roomUploads = await RoomData.find({
+      createdAt: { $gte: weekAgo }
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    for (const room of roomUploads) {
+      allActivities.push({
+        type: 'room_upload',
+        id: room._id,
+        name: room.name || 'Host',
+        action: `uploaded a new room named "${room.title || 'New Room'}"`,
+        email: room.email,
+        details: {
+          roomName: room.title,
+          location: room.location,
+          price: room.price
+        },
+        date: room.createdAt,
+        dateFormatted: room.createdAt ? new Date(room.createdAt).toLocaleDateString() : 'N/A',
+        timeFormatted: room.createdAt ? new Date(room.createdAt).toLocaleTimeString([], { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        }) : 'N/A',
+        timestamp: room.createdAt ? new Date(room.createdAt).getTime() : Date.now()
+      });
+    }
+
+    // Sort by timestamp and take top limit
+    const sortedActivities = allActivities
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, limit);
+
+    res.json({ 
+      success: true,
+      data: sortedActivities,
+      count: sortedActivities.length,
+      types: {
+        bookings: allActivities.filter(a => a.type === 'booking').length,
+        roomUploads: allActivities.filter(a => a.type === 'room_upload').length
+      }
+    });
   } catch (err) {
     console.error('Error fetching recent activities:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
   }
 });
 
@@ -1174,27 +1306,27 @@ app.get('/api/revenue', async (req, res) => {
     const bookings = await Booking.find({
       paymentStatus: 'completed',
       bookingStatus: { $in: ['confirmed', 'checked_in', 'completed'] }
-    }).lean();
+    })
+    .sort({ paymentDate: -1 })
+    .lean();
 
     console.log(`Found ${bookings.length} completed bookings for revenue calculation`);
 
-    if (bookings.length > 0) {
-      console.log('Sample booking structure:', {
-        id: bookings[0]._id,
-        totalCost: bookings[0].totalCost,
-        amount: bookings[0].amount,
-        checkIn: bookings[0].checkIn,
-        paymentStatus: bookings[0].paymentStatus
-      });
-    }
-
+    // Use paymentDate as primary date for revenue calculation
     const validBookings = bookings.filter(b => {
       const cost = b.totalCost || b.amount;
-      return !isNaN(Number(cost)) && Number(cost) > 0;
+      const paymentDate = b.paymentDate || b.createdAt || b.checkIn;
+      return !isNaN(Number(cost)) && Number(cost) > 0 && paymentDate;
     });
 
     console.log(`Valid bookings for revenue: ${validBookings.length}`);
 
+    // Helper function to get date from booking
+    const getBookingDate = (booking) => {
+      return new Date(booking.paymentDate || booking.createdAt || booking.checkIn);
+    };
+
+    // Calculate total revenue
     const totalRevenue = validBookings.reduce((sum, b) => {
       const cost = b.totalCost || b.amount || 0;
       return sum + Number(cost);
@@ -1204,16 +1336,23 @@ app.get('/api/revenue', async (req, res) => {
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth();
     
+    // Get start of current month
     const startOfMonth = new Date(currentYear, currentMonth, 1);
     
+    // Get start of current week (Monday)
     const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() + 1);
+    startOfWeek.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1));
     startOfWeek.setHours(0, 0, 0, 0);
 
+    // Get start of today
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+
+    // Calculate revenues
     const thisMonthRevenue = validBookings
       .filter(b => {
-        const checkIn = new Date(b.checkIn);
-        return checkIn >= startOfMonth && checkIn <= now;
+        const bookingDate = getBookingDate(b);
+        return bookingDate >= startOfMonth && bookingDate <= now;
       })
       .reduce((sum, b) => {
         const cost = b.totalCost || b.amount || 0;
@@ -1222,56 +1361,52 @@ app.get('/api/revenue', async (req, res) => {
 
     const thisWeekRevenue = validBookings
       .filter(b => {
-        const checkIn = new Date(b.checkIn);
-        return checkIn >= startOfWeek && checkIn <= now;
+        const bookingDate = getBookingDate(b);
+        return bookingDate >= startOfWeek && bookingDate <= now;
       })
       .reduce((sum, b) => {
         const cost = b.totalCost || b.amount || 0;
         return sum + Number(cost);
       }, 0);
 
-    const dailyRevenue = {};
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(today.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      
-      const dayRevenue = validBookings
-        .filter(b => {
-          const checkIn = new Date(b.checkIn);
-          checkIn.setHours(0, 0, 0, 0);
-          return checkIn.getTime() === date.getTime();
-        })
-        .reduce((sum, b) => {
-          const cost = b.totalCost || b.amount || 0;
-          return sum + Number(cost);
-        }, 0);
-      
-      dailyRevenue[dateStr] = dayRevenue;
-    }
+    const todayRevenue = validBookings
+      .filter(b => {
+        const bookingDate = getBookingDate(b);
+        return bookingDate >= startOfToday && bookingDate <= now;
+      })
+      .reduce((sum, b) => {
+        const cost = b.totalCost || b.amount || 0;
+        return sum + Number(cost);
+      }, 0);
 
-    const monthlyRevenue = {};
-    for (let i = 5; i >= 0; i--) {
-      const monthDate = new Date(currentYear, currentMonth - i, 1);
-      const monthKey = monthDate.toLocaleString('default', { month: 'short', year: '2-digit' });
-      
-      const monthStart = new Date(currentYear, currentMonth - i, 1);
-      const monthEnd = new Date(currentYear, currentMonth - i + 1, 0);
-      
-      const monthRev = validBookings
-        .filter(b => {
-          const checkIn = new Date(b.checkIn);
-          return checkIn >= monthStart && checkIn <= monthEnd;
-        })
-        .reduce((sum, b) => {
-          const cost = b.totalCost || b.amount || 0;
-          return sum + Number(cost);
-        }, 0);
-      
-      monthlyRevenue[monthKey] = monthRev;
+    // Debug logging
+    console.log('Revenue summary:', {
+      total: totalRevenue,
+      thisMonth: thisMonthRevenue,
+      thisWeek: thisWeekRevenue,
+      today: todayRevenue,
+      bookingsInMonth: validBookings.filter(b => getBookingDate(b) >= startOfMonth).length,
+      bookingsInWeek: validBookings.filter(b => getBookingDate(b) >= startOfWeek).length,
+      dateRange: {
+        monthStart: startOfMonth.toISOString(),
+        weekStart: startOfWeek.toISOString(),
+        todayStart: startOfToday.toISOString(),
+        now: now.toISOString()
+      }
+    });
+
+    // For debugging, log some sample dates
+    if (validBookings.length > 0) {
+      console.log('Sample booking dates:');
+      validBookings.slice(0, 3).forEach((b, i) => {
+        console.log(`Booking ${i + 1}:`, {
+          paymentDate: b.paymentDate,
+          createdAt: b.createdAt,
+          checkIn: b.checkIn,
+          amount: b.totalCost || b.amount,
+          dateObj: getBookingDate(b).toISOString()
+        });
+      });
     }
 
     res.json({ 
@@ -1279,8 +1414,7 @@ app.get('/api/revenue', async (req, res) => {
       totalRevenue, 
       thisMonthRevenue, 
       thisWeekRevenue,
-      dailyRevenue,
-      monthlyRevenue,
+      todayRevenue,
       currency: 'INR',
       bookingCount: validBookings.length,
       averageBookingValue: validBookings.length > 0 ? totalRevenue / validBookings.length : 0
@@ -1296,37 +1430,81 @@ app.get('/api/revenue', async (req, res) => {
 
 app.get('/api/bookings/summary', async (req, res) => {
   try {
-    const bookings = await Booking.find().lean();
+    const bookings = await Booking.find({
+      bookingStatus: { $in: ['confirmed', 'checked_in', 'completed'] }
+    }).lean();
+    
     const now = new Date();
+    
+    // Get current month boundaries
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    
+    // Start of current month
+    const startOfMonth = new Date(currentYear, currentMonth, 1);
+    
+    // End of current month
+    const endOfMonth = new Date(currentYear, currentMonth + 1, 0);
+    endOfMonth.setHours(23, 59, 59, 999);
+    
+    // Get start of current week (Monday)
+    const startOfWeek = new Date(now);
+    const day = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const diffToMonday = day === 0 ? -6 : 1 - day; // If Sunday, go back 6 days
+    startOfWeek.setDate(now.getDate() + diffToMonday);
+    startOfWeek.setHours(0, 0, 0, 0);
+    
+    // Get end of current week (Sunday)
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
 
     let total = 0;
     let thisMonth = 0;
     let thisWeek = 0;
 
     bookings.forEach((b) => {
-      if (!b.checkIn) return;
-      const checkInDate = new Date(b.checkIn);
-      if (isNaN(checkInDate)) return;
+      // Use bookedAt date for monthly/weekly counts (when booking was made)
+      // Use checkIn date for total counts
+      const bookingDate = b.bookedAt || b.createdAt || b.checkIn;
+      
+      if (!bookingDate) return;
+      
+      const bookingDateObj = new Date(bookingDate);
+      if (isNaN(bookingDateObj)) return;
 
       total++;
 
-      if (
-        checkInDate.getMonth() === now.getMonth() &&
-        checkInDate.getFullYear() === now.getFullYear()
-      ) {
+      // Check if booking was MADE in current month (not when check-in is)
+      if (bookingDateObj >= startOfMonth && bookingDateObj <= endOfMonth) {
         thisMonth++;
       }
 
-      const diffDays = (now - checkInDate) / (1000 * 60 * 60 * 24);
-      if (diffDays >= 0 && diffDays <= 7) {
+      // Check if booking was MADE in current week
+      if (bookingDateObj >= startOfWeek && bookingDateObj <= endOfWeek) {
         thisWeek++;
       }
     });
 
-    res.json({ total, thisMonth, thisWeek });
+    res.json({ 
+      success: true,
+      total, 
+      thisMonth, 
+      thisWeek,
+      dateRange: {
+        weekStart: startOfWeek.toISOString(),
+        weekEnd: endOfWeek.toISOString(),
+        monthStart: startOfMonth.toISOString(),
+        monthEnd: endOfMonth.toISOString(),
+        currentDate: now.toISOString()
+      }
+    });
   } catch (err) {
     console.error('Error in /api/bookings/summary:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
   }
 });
 
@@ -1417,8 +1595,10 @@ app.get('/api/traveler/:email/bookings', async (req, res) => {
   }
 });
 
+// GET /api/rooms/count - Get total rooms with accurate booked counts
 app.get('/api/rooms/count', async (req, res) => {
   try {
+    // 1) TOTAL + AVAILABLE from RoomData (verified/approved rooms only)
     const totalRooms = await RoomData.countDocuments({
       $or: [{ status: /verified/i }, { status: /approved/i }]
     });
@@ -1428,24 +1608,33 @@ app.get('/api/rooms/count', async (req, res) => {
       booking: { $ne: true }
     });
 
-    const bookedRooms = totalRooms - availableRooms;
+    // 2) BOOKED ROOMS FROM BOOKINGS COLLECTION (NOT total - available)
+    //    Here we’re counting all confirmed bookings.
+    //    Adjust filter if you only want paymentStatus completed, etc.
+    const totalBookedRooms = await Booking.countDocuments({
+      bookingStatus: /confirmed/i
+    });
 
+    // 3) This month & this week booked (also from Booking)
     const now = new Date();
+
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfWeek = new Date(now);
+    // Monday as start of week
     startOfWeek.setDate(now.getDate() - now.getDay() + 1);
     startOfWeek.setHours(0, 0, 0, 0);
 
-    const thisMonthBooked = await RoomData.countDocuments({
-      booking: true,
-      updatedAt: { $gte: startOfMonth }
+    const thisMonthBooked = await Booking.countDocuments({
+      bookingStatus: /confirmed/i,
+      checkIn: { $gte: startOfMonth }
     });
 
-    const thisWeekBooked = await RoomData.countDocuments({
-      booking: true,
-      updatedAt: { $gte: startOfWeek }
+    const thisWeekBooked = await Booking.countDocuments({
+      bookingStatus: /confirmed/i,
+      checkIn: { $gte: startOfWeek }
     });
 
+    // 4) Group by status from RoomData (same as before)
     const roomsByStatus = await RoomData.aggregate([
       {
         $group: {
@@ -1455,6 +1644,7 @@ app.get('/api/rooms/count', async (req, res) => {
       }
     ]);
 
+    // 5) Popular room types (Shared / Full / Any, etc.)
     const popularRoomTypes = await RoomData.aggregate([
       {
         $match: {
@@ -1472,12 +1662,13 @@ app.get('/api/rooms/count', async (req, res) => {
       { $limit: 5 }
     ]);
 
+    // 6) Final response
     res.json({
       success: true,
       counts: {
         total: totalRooms,
         available: availableRooms,
-        booked: bookedRooms,
+        booked: totalBookedRooms,      // ✅ NOW FROM BOOKINGS
         thisMonthBooked,
         thisWeekBooked
       },
@@ -1495,6 +1686,7 @@ app.get('/api/rooms/count', async (req, res) => {
     });
   }
 });
+
 
 app.get('/api/user-counts', async (req, res) => {
   try {
@@ -1743,6 +1935,754 @@ app.get('/api/trends', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch trends data',
+      error: error.message
+    });
+  }
+});
+// ======================================================
+// ========== MONGODB AI CHAT INTEGRATION ===============
+// ======================================================
+
+
+// Database connection
+let mongoClient = null;
+let isConnected = false;
+
+// -------------------------------
+// Connect to MongoDB
+// -------------------------------
+async function connectToMongoDB() {
+  try {
+    const connectionString = process.env.ADMIN_TRAVELER_URI ;
+    
+    mongoClient = new MongoClient(connectionString);
+    await mongoClient.connect();
+    isConnected = true;
+    console.log("[AI] Connected to MongoDB successfully");
+    return true;
+  } catch (error) {
+    console.error("[AI] Failed to connect to MongoDB:", error.message);
+    isConnected = false;
+    return false;
+  }
+}
+
+// -------------------------------
+// Fetch Rooms from MongoDB
+// -------------------------------
+async function fetchRoomsFromMongoDB(query = null) {
+  if (!isConnected) {
+    const connected = await connectToMongoDB();
+    if (!connected) return [];
+  }
+  
+  try {
+    const db = mongoClient.db("Admin_Traveler");
+    const collection = db.collection("RoomDataTraveler");
+    
+    let mongoQuery = {};
+    
+    // If we have a search query, use MongoDB text search
+    if (query && query.trim()) {
+      mongoQuery = { 
+        $or: [
+          { title: { $regex: query, $options: 'i' } },
+          { name: { $regex: query, $options: 'i' } },
+          { location: { $regex: query, $options: 'i' } },
+          { description: { $regex: query, $options: 'i' } },
+          { propertyType: { $regex: query, $options: 'i' } },
+          { roomType: { $regex: query, $options: 'i' } }
+        ]
+      };
+    }
+    
+    // Fetch rooms with all necessary fields
+    const rooms = await collection.find(mongoQuery, {
+      projection: {
+        _id: 1,
+        title: 1,
+        name: 1,
+        price: 1,
+        location: 1,
+        description: 1,
+        bedrooms: 1,
+        beds: 1,
+        capacity: 1,
+        propertyType: 1,
+        roomType: 1,
+        amenities: 1,
+        foodFacility: 1,
+        discount: 1,
+        status: 1,
+        booking: 1,
+        createdAt: 1,
+        images: 1
+      }
+    })
+    .limit(100)
+    .sort({ createdAt: -1 })
+    .toArray();
+    
+    console.log(`[AI] Fetched ${rooms.length} rooms from MongoDB${query ? ` for query: "${query}"` : ''}`);
+    
+    // Transform MongoDB documents to our format
+    return rooms.map(room => ({
+      id: room._id.toString(),
+      _id: room._id.toString(),
+      name: room.title || room.name || "Untitled Room",
+      price: room.price || 0,
+      location: room.location || "Location not specified",
+      description: room.description || "No description available",
+      bedrooms: room.bedrooms || 1,
+      beds: room.beds || 1,
+      capacity: room.capacity || 2,
+      propertyType: room.propertyType || "Accommodation",
+      roomType: room.roomType || "Standard",
+      amenities: Array.isArray(room.amenities) ? room.amenities : [],
+      foodFacility: room.foodFacility || "Not specified",
+      discount: room.discount || 0,
+      status: room.status || "pending",
+      booking: room.booking || false,
+      images: Array.isArray(room.images) ? room.images : [],
+      createdAt: room.createdAt || new Date()
+    }));
+    
+  } catch (error) {
+    console.error("[AI] Error fetching rooms from MongoDB:", error.message);
+    return [];
+  }
+}
+
+// -------------------------------
+// Handle Greetings and Small Talk
+// -------------------------------
+function isGreetingOrSmallTalk(query) {
+  const greetings = [
+    "hi", "hello", "hey", "good morning", "good afternoon", "good evening",
+    "how are you", "what's up", "hi there", "hello there", "morning", "evening"
+  ];
+  
+  const smallTalk = [
+    "thanks", "thank you", "ok", "okay", "bye", "goodbye", "see you",
+    "help", "what can you do", "who are you", "what are you", "can you help",
+    "nice", "good", "great", "awesome", "cool", "perfect", "excellent"
+  ];
+  
+  const lowerQuery = query.toLowerCase().trim();
+  
+  return greetings.some(greeting => lowerQuery === greeting) ||
+         smallTalk.some(talk => lowerQuery.includes(talk));
+}
+
+// -------------------------------
+// Generate Greeting Response
+// -------------------------------
+async function generateGreetingResponse(query) {
+  const lowerQuery = query.toLowerCase().trim();
+  
+  // Count rooms in database
+  let roomCount = 0;
+  try {
+    const rooms = await fetchRoomsFromMongoDB();
+    roomCount = rooms.length;
+  } catch (error) {
+    roomCount = 0;
+  }
+  
+  const responses = {
+    "hi": `Hello! 👋 I'm your ShelterSeek booking assistant. I can help you find ${roomCount > 0 ? `${roomCount} accommodations` : 'hotels and accommodations'} across India. What are you looking for today?`,
+    "hello": `Hi there! 🏨 I'm here to help you find the perfect place to stay. ${roomCount > 0 ? `I have ${roomCount} properties in my database.` : ''} Where would you like to go?`,
+    "hey": "Hey! ✨ Welcome to ShelterSeek. I'm your AI assistant for finding hotels, resorts, and homestays. Tell me what you need!",
+    "good morning": "Good morning! ☀️ Ready to find your perfect stay for the day?",
+    "good afternoon": "Good afternoon! 🌤️ How can I help you find accommodation today?",
+    "good evening": "Good evening! 🌙 Looking for a place to stay tonight?",
+    "how are you": "I'm great, thanks! Ready to help you find amazing accommodations. What's on your mind?",
+    "what can you do": `I can help you search through ${roomCount} properties! I can find hotels by location, price, type, and amenities. Try asking me something like:\n• "Hotels in Goa"\n• "Budget stays under 2000"\n• "Beach resorts"\n• "Family rooms with pool"`,
+    "who are you": "I'm ShelterSeek AI, your personal hotel booking assistant! I search through our database to find the perfect accommodations for you.",
+    "what are you": "I'm an AI-powered booking assistant for ShelterSeek. I help travelers find and book hotels, resorts, and homestays across India.",
+    "help": `I can help you find hotels, resorts, homestays, and more! Just tell me what you're looking for. Examples:\n• "Hotels in Mumbai"\n• "Budget stays under ₹1500"\n• "Beach resorts in Goa"\n• "Family rooms with pool"\n• "Luxury hotels"\n• "Properties near airport"`,
+    "thanks": "You're welcome! 😊 Let me know if you need anything else.",
+    "thank you": "My pleasure! Happy to help you find the perfect stay.",
+    "bye": "Goodbye! 👋 Have a great day and safe travels!",
+    "goodbye": "Take care! Hope to help you again soon. 🏡",
+    "see you": "See you later! 😊 Safe travels!"
+  };
+  
+  // Find exact match
+  for (const [key, response] of Object.entries(responses)) {
+    if (lowerQuery === key) {
+      return {
+        reply: response,
+        showRooms: false,
+        isGreeting: true
+      };
+    }
+  }
+  
+  // Find partial match for longer greetings
+  for (const [key, response] of Object.entries(responses)) {
+    if (lowerQuery.includes(key) && key.length > 3) {
+      return {
+        reply: response,
+        showRooms: false,
+        isGreeting: true
+      };
+    }
+  }
+  
+  // Default greeting
+  return {
+    reply: `Hi! I'm ShelterSeek bot — your hotel booking assistant. I have ${roomCount} properties in my database. Where would you like to stay and when?`,
+    showRooms: false,
+    isGreeting: true
+  };
+}
+
+// -------------------------------
+// Smart Room Search
+// -------------------------------
+async function searchRoomsInMongoDB(query) {
+  if (!query || query.trim() === "") {
+    // Return recent rooms for empty query
+    const rooms = await fetchRoomsFromMongoDB();
+    return rooms.slice(0, 10);
+  }
+  
+  const searchTerm = query.toLowerCase().trim();
+  console.log(`[AI] Searching MongoDB for: "${searchTerm}"`);
+  
+  // First, try direct database query
+  let rooms = await fetchRoomsFromMongoDB(searchTerm);
+  
+  // If we found results, return them
+  if (rooms.length > 0) {
+    console.log(`[AI] Found ${rooms.length} rooms with direct search`);
+    return rooms;
+  }
+  
+  // If no direct results, fetch all and filter locally
+  console.log(`[AI] No direct matches, fetching all rooms for intelligent filtering`);
+  const allRooms = await fetchRoomsFromMongoDB();
+  
+  if (allRooms.length === 0) {
+    return [];
+  }
+  
+  // Intelligent filtering based on search intent
+  const scoredRooms = allRooms.map(room => {
+    let score = 0;
+    
+    // Name match (highest priority)
+    if (room.name.toLowerCase().includes(searchTerm)) score += 100;
+    
+    // Location match (high priority)
+    if (room.location.toLowerCase().includes(searchTerm)) score += 80;
+    
+    // Property type match
+    if (room.propertyType.toLowerCase().includes(searchTerm)) score += 60;
+    
+    // Description match
+    if (room.description.toLowerCase().includes(searchTerm)) score += 40;
+    
+    // Room type match
+    if (room.roomType.toLowerCase().includes(searchTerm)) score += 50;
+    
+    // Amenities match
+    room.amenities.forEach(amenity => {
+      if (amenity.toLowerCase().includes(searchTerm)) score += 20;
+    });
+    
+    // Food facility match
+    if (room.foodFacility.toLowerCase().includes(searchTerm)) score += 30;
+    
+    // Price search
+    const priceMatch = searchTerm.match(/\d+/);
+    if (priceMatch) {
+      const targetPrice = parseInt(priceMatch[0]);
+      if (!isNaN(targetPrice)) {
+        // Close price match
+        const priceDiff = Math.abs(room.price - targetPrice);
+        if (priceDiff < 500) score += 40;
+        // Bonus for cheaper than target
+        if (room.price <= targetPrice) score += 30;
+      }
+    }
+    
+    // Common search patterns with synonyms
+    const searchPatterns = {
+      "budget": ["cheap", "affordable", "economy", "low cost", "inexpensive"],
+      "luxury": ["premium", "deluxe", "5-star", "high-end", "exclusive"],
+      "beach": ["seaside", "ocean", "sea", "coastal", "shore"],
+      "mountain": ["hill", "hillside", "valley", "view"],
+      "family": ["kids", "children", "large", "spacious"],
+      "business": ["work", "corporate", "executive", "meeting"],
+      "pool": ["swimming", "jacuzzi", "hot tub"],
+      "wifi": ["internet", "connection", "online"],
+      "breakfast": ["meal", "food", "dining"]
+    };
+    
+    // Check each pattern
+    for (const [pattern, synonyms] of Object.entries(searchPatterns)) {
+      if (searchTerm.includes(pattern) || synonyms.some(syn => searchTerm.includes(syn))) {
+        // Check if room matches the pattern
+        const roomText = [
+          room.description,
+          room.propertyType,
+          room.roomType,
+          ...room.amenities
+        ].join(' ').toLowerCase();
+        
+        if (roomText.includes(pattern) || synonyms.some(syn => roomText.includes(syn))) {
+          score += 35;
+        }
+        
+        // Specific pattern bonuses
+        if (pattern === "budget" && room.price < 2000) score += 25;
+        if (pattern === "luxury" && room.price > 4000) score += 25;
+        if (pattern === "family" && room.capacity >= 4) score += 20;
+        if (pattern === "business" && room.amenities.some(a => 
+          a.toLowerCase().includes("wifi") || a.toLowerCase().includes("workspace"))) score += 20;
+      }
+    }
+    
+    // Popular location detection
+    const popularLocations = {
+      "goa": ["north goa", "south goa", "panaji", "calangute", "baga"],
+      "mumbai": ["bandra", "colaba", "juhu", "andheri", "navi mumbai"],
+      "delhi": ["new delhi", "connaught place", "aerocity", "paharganj"],
+      "bangalore": ["bengaluru", "koramangala", "indiranagar", "mg road"],
+      "shimla": ["manali", "dharamshala", "mussorie", "nainital"]
+    };
+    
+    for (const [location, aliases] of Object.entries(popularLocations)) {
+      if (searchTerm.includes(location) || aliases.some(alias => searchTerm.includes(alias))) {
+        if (room.location.toLowerCase().includes(location)) {
+          score += 70;
+        }
+      }
+    }
+    
+    // Boost verified/approved rooms
+    if (room.status === "verified" || room.status === "approved") {
+      score += 15;
+    }
+    
+    // Boost available rooms (not booked)
+    if (!room.booking) {
+      score += 10;
+    }
+    
+    return { ...room, score };
+  });
+  
+  // Filter and sort by score
+  const relevantRooms = scoredRooms
+    .filter(room => room.score > 0)
+    .sort((a, b) => b.score - a.score);
+  
+  console.log(`[AI] Intelligent filtering found ${relevantRooms.length} relevant rooms`);
+  
+  // If still no results, return some recent rooms
+  if (relevantRooms.length === 0 && allRooms.length > 0) {
+    console.log(`[AI] No matches found, returning recent rooms`);
+    return allRooms.slice(0, 5);
+  }
+  
+  return relevantRooms.slice(0, 8); // Limit to 8 results
+}
+
+// -------------------------------
+// Generate Search Response
+// -------------------------------
+function generateSearchResponse(query, foundRooms) {
+  if (foundRooms.length === 0) {
+    return {
+      reply: `🔍 **Search Results for "${query}"**\n\nI searched our database but couldn't find any rooms matching your query.\n\n**Try searching differently:**\n• Use specific locations (e.g., "Goa", "Mumbai Central")\n• Mention price range (e.g., "under 2000", "budget")\n• Specify room type (e.g., "hotel", "resort", "apartment")\n• Add requirements (e.g., "with pool", "family room", "near airport")\n\nOr simply browse all available rooms!`,
+      suggestions: [
+        "Browse all rooms",
+        "Search by location",
+        "Filter by price",
+        "Contact support"
+      ]
+    };
+  }
+  
+  // Analyze found rooms
+  const locations = [...new Set(foundRooms.map(r => r.location).filter(l => l && l !== "Location not specified"))];
+  const propertyTypes = [...new Set(foundRooms.map(r => r.propertyType).filter(t => t))];
+  const prices = foundRooms.map(r => r.price).filter(p => p > 0);
+  
+  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+  const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+  const avgPrice = prices.length > 0 ? Math.round(prices.reduce((a, b) => a + b) / prices.length) : 0;
+  
+  // Build response
+  let reply = `🔍 **Search Results for "${query}"**\n\n`;
+  return {
+    reply,
+    suggestions: generateSearchSuggestions(foundRooms, query)
+  };
+}
+
+// -------------------------------
+// Generate Search Suggestions
+// -------------------------------
+function generateSearchSuggestions(foundRooms, query) {
+  const suggestions = new Set();
+  
+  // Basic suggestions
+ 
+  
+  // Location-based from actual results
+  const locations = [...new Set(foundRooms.map(r => r.location).filter(l => l))];
+  locations.slice(0, 2).forEach(location => {
+    suggestions.add(`More in ${location}`);
+  });
+  
+  // Price range suggestions
+  const prices = foundRooms.map(r => r.price).filter(p => p > 0);
+  if (prices.length > 0) {
+    const avgPrice = prices.reduce((a, b) => a + b) / prices.length;
+    
+    if (avgPrice < 1500) {
+      suggestions.add("Mid-range ₹1500-₹3000");
+      suggestions.add("Luxury ₹4000+");
+    } else if (avgPrice < 3000) {
+      suggestions.add("Budget under ₹1500");
+      suggestions.add("Premium ₹3000+");
+    } else {
+      suggestions.add("Affordable under ₹2000");
+      suggestions.add("Mid-range ₹2000-₹4000");
+    }
+  }
+  
+  // Property type suggestions
+  const propertyTypes = [...new Set(foundRooms.map(r => r.propertyType).filter(t => t))];
+  propertyTypes.slice(0, 2).forEach(type => {
+    suggestions.add(`Browse ${type}s`);
+  });
+  
+  // Common amenities suggestions
+  const allAmenities = foundRooms.flatMap(r => r.amenities);
+  const amenityCount = {};
+  allAmenities.forEach(amenity => {
+    if (amenity && typeof amenity === 'string') {
+      amenityCount[amenity] = (amenityCount[amenity] || 0) + 1;
+    }
+  });
+  
+  const commonAmenities = Object.entries(amenityCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([amenity]) => amenity);
+  
+  commonAmenities.forEach(amenity => {
+    suggestions.add(`With ${amenity}`);
+  });
+  
+  // Query-specific suggestions
+  if (query) {
+    const lowerQuery = query.toLowerCase();
+    
+    if (lowerQuery.includes("goa") || lowerQuery.includes("beach")) {
+      suggestions.add("Beachfront view");
+      suggestions.add("Sea facing");
+    }
+    
+    if (lowerQuery.includes("mountain") || lowerQuery.includes("hill")) {
+      suggestions.add("Mountain view");
+      suggestions.add("Valley view");
+    }
+    
+    if (lowerQuery.includes("family")) {
+      suggestions.add("Large rooms");
+      suggestions.add("Extra beds");
+    }
+    
+    if (lowerQuery.includes("business")) {
+      suggestions.add("Work desk");
+      suggestions.add("Conference room");
+    }
+  }
+  
+  // Add popular search terms
+  suggestions.add("With breakfast");
+  suggestions.add("Pet friendly");
+  suggestions.add("Free parking");
+  
+  return Array.from(suggestions).slice(0, 6);
+}
+
+// -------------------------------
+// Generate Initial Suggestions
+// -------------------------------
+function generateInitialSuggestions() {
+  return [
+    "Search hotels in Goa",
+    "Show budget hotels",
+    "Beachfront properties",
+    "Luxury resorts",
+    "Family rooms",
+    "City center hotels"
+  ];
+}
+
+// ======================================================
+// ===============   MAIN CHAT ENDPOINT   ===============
+// ======================================================
+
+app.post('/api/ai-chat', async (req, res) => {
+  console.log("[AI Chat] Request received");
+  
+  try {
+    const { message, history } = req.body;
+    const query = message ? message.trim() : "";
+    
+    console.log(`[AI Chat] Processing query: "${query}"`);
+    
+    // Handle empty query
+    if (!query) {
+      return res.json({
+        reply: "Hello! I'm your ShelterSeek booking assistant. How can I help you find the perfect accommodation today?",
+        hotels: [],
+        suggestions: generateInitialSuggestions()
+      });
+    }
+    
+    // Handle greetings and small talk
+    if (isGreetingOrSmallTalk(query)) {
+      console.log("[AI Chat] Detected greeting/small talk");
+      const greetingResponse = await generateGreetingResponse(query);
+      
+      // For greetings, return greeting without rooms
+      return res.json({
+        reply: greetingResponse.reply,
+        hotels: [],
+        suggestions: greetingResponse.isGreeting ? generateInitialSuggestions() : []
+      });
+    }
+    
+    // Ensure MongoDB connection for actual searches
+    if (!isConnected) {
+      const connected = await connectToMongoDB();
+      if (!connected) {
+        return res.json({
+          reply: "I'm currently unable to access our room database. Please try again in a moment or contact support.",
+          hotels: [],
+          suggestions: ["Try again", "Contact support"]
+        });
+      }
+    }
+    
+    // Search for rooms in MongoDB
+    const foundRooms = await searchRoomsInMongoDB(query);
+    
+    // Generate response based on search results
+    const response = generateSearchResponse(query, foundRooms);
+    
+    // Format rooms for frontend
+    const formattedRooms = foundRooms.slice(0, 5).map(room => ({
+      id: room.id,
+      _id: room._id,
+      name: room.name,
+      price: room.price,
+      location: room.location,
+      description: room.description,
+      capacity: room.capacity,
+      propertyType: room.propertyType,
+      roomType: room.roomType,
+      amenities: room.amenities,
+      discount: room.discount,
+      images: room.images,
+      status: room.status,
+      booking: room.booking
+    }));
+    
+    const result = {
+      reply: response.reply,
+      hotels: formattedRooms,
+      suggestions: response.suggestions
+    };
+    
+    console.log(`[AI Chat] Response ready: ${formattedRooms.length} rooms, ${response.suggestions.length} suggestions`);
+    
+    res.json(result);
+    
+  } catch (error) {
+    console.error("[AI Chat] Error:", error);
+    
+    // Emergency fallback response
+    res.json({
+      reply: "Hello! I'm your ShelterSeek booking assistant. I'm experiencing some technical difficulties at the moment. Please try your search again in a few moments.",
+      hotels: [],
+      suggestions: [
+        "Try again",
+        "Browse all rooms",
+        "Contact customer support"
+      ]
+    });
+  }
+});
+
+// ======================================================
+// ===============   INITIALIZATION   ===================
+// ======================================================
+
+// Initialize connection on server start
+connectToMongoDB().then(success => {
+  if (success) {
+    console.log("[AI] MongoDB chat system initialized successfully");
+    
+    // Test the connection with a sample query
+    setTimeout(async () => {
+      try {
+        const rooms = await fetchRoomsFromMongoDB();
+        console.log(`[AI] Initial inventory loaded: ${rooms.length} rooms from MongoDB`);
+        if (rooms.length > 0) {
+          console.log("[AI] Sample room from DB:", {
+            name: rooms[0].name,
+            location: rooms[0].location,
+            price: rooms[0].price,
+            type: rooms[0].propertyType
+          });
+        } else {
+          console.warn("[AI] WARNING: No rooms found in MongoDB collection!");
+        }
+      } catch (err) {
+        console.error("[AI] Error loading initial inventory:", err.message);
+      }
+    }, 2000);
+  } else {
+    console.error("[AI] Failed to initialize MongoDB chat system");
+  }
+});
+
+// ======================================================
+// ===============   DEBUG ENDPOINTS   ==================
+// ======================================================
+
+// Test database connection and data
+app.get('/api/ai/db-status', async (req, res) => {
+  try {
+    if (!isConnected) {
+      await connectToMongoDB();
+    }
+    
+    const db = mongoClient.db("Admin_Traveler");
+    const collection = db.collection("RoomDataTraveler");
+    
+    const totalRooms = await collection.countDocuments();
+    const verifiedRooms = await collection.countDocuments({ status: "verified" });
+    const approvedRooms = await collection.countDocuments({ status: "approved" });
+    const availableRooms = await collection.countDocuments({ booking: { $ne: true } });
+    
+    // Get sample rooms
+    const sampleRooms = await collection.find({}, {
+      projection: { 
+        title: 1, 
+        location: 1, 
+        price: 1, 
+        status: 1,
+        propertyType: 1,
+        capacity: 1,
+        _id: 0 
+      }
+    }).limit(5).toArray();
+    
+    res.json({
+      connected: isConnected,
+      database: "Admin_Traveler",
+      collection: "RoomDataTraveler",
+      counts: {
+        total: totalRooms,
+        verified: verifiedRooms,
+        approved: approvedRooms,
+        available: availableRooms
+      },
+      sampleRooms: sampleRooms,
+      chatSystem: "Active",
+      lastChecked: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    res.json({
+      connected: isConnected,
+      error: error.message,
+      suggestion: "Check MongoDB connection string and network"
+    });
+  }
+});
+
+// Test search functionality
+app.get('/api/ai/search-test/:query', async (req, res) => {
+  try {
+    const query = req.params.query;
+    const rooms = await searchRoomsInMongoDB(query);
+    
+    res.json({
+      query,
+      totalFound: rooms.length,
+      rooms: rooms.slice(0, 10).map(room => ({
+        name: room.name,
+        location: room.location,
+        price: room.price,
+        type: room.propertyType,
+        capacity: room.capacity,
+        description: room.description.substring(0, 100) + "...",
+        score: room.score || 0,
+        status: room.status
+      }))
+    });
+    
+  } catch (error) {
+    res.json({
+      error: error.message,
+      query: req.params.query
+    });
+  }
+});
+
+// Refresh database connection
+app.get('/api/ai/refresh', async (req, res) => {
+  try {
+    if (mongoClient) {
+      await mongoClient.close();
+    }
+    
+    isConnected = false;
+    await connectToMongoDB();
+    
+    const rooms = await fetchRoomsFromMongoDB();
+    
+    res.json({
+      success: true,
+      message: `Database connection refreshed. Loaded ${rooms.length} rooms.`,
+      count: rooms.length,
+      connected: isConnected
+    });
+  } catch (error) {
+    res.json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Test greeting responses
+app.get('/api/ai/test-greeting/:message', async (req, res) => {
+  try {
+    const message = req.params.message;
+    const isGreeting = isGreetingOrSmallTalk(message);
+    const response = await generateGreetingResponse(message);
+    
+    res.json({
+      message,
+      isGreeting,
+      response: response.reply,
+      showRooms: response.showRooms
+    });
+  } catch (error) {
+    res.json({
       error: error.message
     });
   }

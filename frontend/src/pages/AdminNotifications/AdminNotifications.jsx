@@ -500,11 +500,11 @@ function AdminNotifications() {
               />
             </div>
             
-            <div style={styles.resultsCount}>
+            
+          </div>
+          <div style={styles.resultsCount}>
               {filteredUsers.length} {activeTab === 'host' ? 'hosts' : 'travellers'} found
             </div>
-          </div>
-
           {/* Error State */}
           {error && (
             <div style={styles.errorState}>

@@ -21,11 +21,15 @@ function AdminDashboard() {
     available: 0,
     booked: 0,
     thisMonthBooked: 0,
-    thisWeekBooked: 0,
-    sharedRooms: 0,
-    fullRooms: 0
+    thisWeekBooked: 0
   });
   const [loadingRooms, setLoadingRooms] = useState(true);
+
+  // NEW
+  const [roomTypeCounts, setRoomTypeCounts] = useState({
+    shared: 0,
+    full: 0
+  });
 
   // fetch data
   useEffect(() => {
@@ -52,26 +56,23 @@ function AdminDashboard() {
       .then(data => {
         console.log('Room counts response:', data);
         if (data.success) {
-          const counts = data.counts || {};
+          setRoomCounts(data.counts);
+
+          // 🔹 NEW: derive Shared / Full counts from popularTypes
           let shared = 0;
           let full = 0;
 
           if (Array.isArray(data.popularTypes)) {
-            data.popularTypes.forEach(t => {
-              if (t._id === 'Shared') shared = t.count || 0;
-              if (t._id === 'Full') full = t.count || 0;
+            data.popularTypes.forEach((t) => {
+              if (/shared/i.test(t._id)) {
+                shared = t.count;
+              } else if (/full/i.test(t._id)) {
+                full = t.count;
+              }
             });
           }
 
-          setRoomCounts({
-            total: counts.total || 0,
-            available: counts.available || 0,
-            booked: counts.booked || 0,
-            thisMonthBooked: counts.thisMonthBooked || 0,
-            thisWeekBooked: counts.thisWeekBooked || 0,
-            sharedRooms: shared,
-            fullRooms: full
-          });
+          setRoomTypeCounts({ shared, full });
         } else {
           console.error('Failed to fetch room counts:', data.message);
           setRoomCounts({
@@ -79,10 +80,9 @@ function AdminDashboard() {
             available: 0,
             booked: 0,
             thisMonthBooked: 0,
-            thisWeekBooked: 0,
-            sharedRooms: 0,
-            fullRooms: 0
+            thisWeekBooked: 0
           });
+          setRoomTypeCounts({ shared: 0, full: 0 });
         }
       })
       .catch(err => {
@@ -92,22 +92,32 @@ function AdminDashboard() {
           available: 0,
           booked: 0,
           thisMonthBooked: 0,
-          thisWeekBooked: 0,
-          sharedRooms: 0,
-          fullRooms: 0
+          thisWeekBooked: 0
         });
+        setRoomTypeCounts({ shared: 0, full: 0 });
       })
       .finally(() => setLoadingRooms(false));
 
-    // Fetch new customers
+    // Fetch new customers - updated to show account type
     fetch('http://localhost:3001/api/new-customers')
       .then(res => res.json())
       .then(result => {
-        if (Array.isArray(result?.data)) setNewCustomers(result.data);
-        else if (Array.isArray(result)) setNewCustomers(result);
-        else setNewCustomers([]);
+        console.log('New customers response:', result);
+        if (result.success && Array.isArray(result.data)) {
+          setNewCustomers(result.data);
+        } else if (Array.isArray(result?.data)) {
+          setNewCustomers(result.data);
+        } else if (Array.isArray(result)) {
+          setNewCustomers(result);
+        } else {
+          console.error('Invalid new customers response:', result);
+          setNewCustomers([]);
+        }
       })
-      .catch(() => setNewCustomers([]));
+      .catch((err) => {
+        console.error('Error fetching new customers:', err);
+        setNewCustomers([]);
+      });
 
     // Fetch recent activities
     fetch('http://localhost:3001/api/recent-activities')
@@ -143,6 +153,33 @@ function AdminDashboard() {
       })
       .catch(() => {});
   }, []);
+
+  // Function to get initials from name
+  const getInitials = (name) => {
+    if (!name) return '?';
+    return name
+      .split(' ')
+      .map(word => word.charAt(0))
+      .join('')
+      .toUpperCase()
+      .substring(0, 2);
+  };
+
+  // Function to get account type badge style
+  const getAccountTypeStyle = (type) => {
+    const isHost = type === 'host' || type === 'Host';
+    return {
+      backgroundColor: isHost ? '#e6f7ed' : '#ebf5ff',
+      color: isHost ? '#0a7b3e' : '#0066cc',
+      borderColor: isHost ? '#0a7b3e' : '#0066cc',
+      padding: '2px 8px',
+      borderRadius: '12px',
+      fontSize: '12px',
+      fontWeight: '600',
+      display: 'inline-block',
+      marginTop: '4px'
+    };
+  };
 
   const filteredBookings = bookings.filter(b =>
     (b.userName ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -202,10 +239,10 @@ function AdminDashboard() {
                   Total: {roomCounts.total} | Booked: {roomCounts.booked}
                 </div>
                 <div className="admin-dashboard-meta-line">
-                  Shared Rooms: {roomCounts.sharedRooms}
+                  Shared Rooms: {roomTypeCounts.shared}
                 </div>
                 <div className="admin-dashboard-meta-line">
-                  Full Rooms: {roomCounts.fullRooms}
+                  Full Rooms: {roomTypeCounts.full}
                 </div>
               </>
             )}
@@ -225,27 +262,72 @@ function AdminDashboard() {
 
             <ul className="admin-dashboard-list">
               {newCustomers.length > 0 ? (
-                newCustomers.map((c, i) => (
-                  <li key={i} className="admin-dashboard-list-row">
-                    <div className="admin-dashboard-avatar">
-                      {c.initials ?? (c.name ? c.name.charAt(0).toUpperCase() : '?')}
-                    </div>
-                    <div>
-                      <div className="admin-dashboard-item-name">
-                        {c.name || 'N/A'}
+                newCustomers.map((customer, i) => {
+                  const isHost = customer.accountType === 'host' || customer.accountType === 'Host';
+                  const initials = getInitials(customer.name);
+                  
+                  return (
+                    <li key={customer.id || i} className="admin-dashboard-list-row">
+                      <div 
+                        className="admin-dashboard-avatar"
+                        style={{
+                          backgroundColor: isHost ? '#1cc88a' : '#4e73df',
+                          color: 'white',
+                          fontWeight: '600'
+                        }}
+                      >
+                        {initials}
                       </div>
-                      <div className="admin-dashboard-item-email">
-                        {c.email || '—'}
+                      <div className="admin-dashboard-customer-details">
+                        <div className="admin-dashboard-item-name">
+                          {customer.name || 'Unknown User'}
+                        </div>
+                        <div className="admin-dashboard-item-email">
+                          {customer.email || '—'}
+                        </div>
+                        <div 
+                          style={getAccountTypeStyle(customer.accountType)}
+                          className="admin-dashboard-account-type-badge"
+                        >
+                          {isHost ? '🏠 Host' : '✈️ Traveler'}
+                        </div>
+                        {customer.joinedDate && (
+                          <div className="admin-dashboard-joined-date">
+                            Joined: {customer.joinedDate}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </li>
-                ))
+                    </li>
+                  );
+                })
               ) : (
                 <div className="admin-dashboard-empty">
                   No new customers
                 </div>
               )}
             </ul>
+            
+            {/* Summary info if available */}
+            {/* {newCustomers.length > 0 && (
+              <div className="admin-dashboard-customers-summary">
+                <div className="admin-dashboard-summary-item">
+                  <span className="admin-dashboard-summary-label">Total:</span>
+                  <span className="admin-dashboard-summary-value">{newCustomers.length}</span>
+                </div>
+                <div className="admin-dashboard-summary-item">
+                  <span className="admin-dashboard-summary-label">Travelers:</span>
+                  <span className="admin-dashboard-summary-value">
+                    {newCustomers.filter(c => c.accountType === 'Traveler' || c.accountType === 'traveller').length}
+                  </span>
+                </div>
+                <div className="admin-dashboard-summary-item">
+                  <span className="admin-dashboard-summary-label">Hosts:</span>
+                  <span className="admin-dashboard-summary-value">
+                    {newCustomers.filter(c => c.accountType === 'Host' || c.accountType === 'host').length}
+                  </span>
+                </div>
+              </div>
+            )} */}
           </div>
 
           <div className="admin-dashboard-side-card">
@@ -254,31 +336,52 @@ function AdminDashboard() {
               <div className="admin-dashboard-small-bar" />
             </div>
 
-            <ul className="admin-dashboard-list">
-              {recentActivities.length > 0 ? (
-                recentActivities.map((act, i) => (
-                  <li key={i} className="admin-dashboard-list-row">
-                    <div className="admin-dashboard-avatar">
-                      {act.initials ?? (act.name ? act.name.charAt(0).toUpperCase() : 'A')}
-                    </div>
-                    <div>
-                      <div className="admin-dashboard-activity-text">
-                        <strong>{act.name}</strong> {act.action}
-                      </div>
-                      <div className="admin-dashboard-activity-time">
-                        {act.updatedAt
-                          ? new Date(act.updatedAt).toLocaleString()
-                          : ''}
-                      </div>
-                    </div>
-                  </li>
-                ))
-              ) : (
-                <div className="admin-dashboard-empty">
-                  No recent activities
-                </div>
+<ul className="admin-dashboard-list">
+  {recentActivities.length > 0 ? (
+    recentActivities.map((act, i) => {
+      const initials = getInitials(act.name);
+      
+      return (
+        <li key={i} className="admin-dashboard-list-row">
+          <div 
+            className="admin-dashboard-avatar"
+            style={{
+              backgroundColor: '#f6c23e',
+              color: 'white',
+              fontWeight: '600'
+            }}
+          >
+            {initials}
+          </div>
+          <div>
+            <div className="admin-dashboard-activity-text">
+              <strong>{act.name}</strong> {act.action}
+            </div>
+            <div className="admin-dashboard-activity-meta">
+              <span className="admin-dashboard-activity-time">
+                {act.dateFormatted} at {act.timeFormatted}
+              </span>
+              {act.email && (
+                <span className="admin-dashboard-activity-email">
+                  • {act.email}
+                </span>
               )}
-            </ul>
+            </div>
+            {act.amount > 0 && (
+              <div className="admin-dashboard-activity-amount">
+                Amount: ₹{act.amount.toLocaleString()}
+              </div>
+            )}
+          </div>
+        </li>
+      );
+    })
+  ) : (
+    <div className="admin-dashboard-empty">
+      No recent activities
+    </div>
+  )}
+</ul>
           </div>
         </div>
 
@@ -334,11 +437,12 @@ function AdminDashboard() {
                     <th>#</th>
                     <th>Booking ID</th>
                     <th>Guest Name</th>
+                    <th>Guest Email</th>
                     <th>Room</th>
                     <th>Check-In</th>
                     <th>Check-Out</th>
                     <th>Total Cost</th>
-                    <th>Guest Email</th>
+                    {/* <th>Guest Email</th> */}
                   </tr>
                 </thead>
                 <tbody>
@@ -354,6 +458,7 @@ function AdminDashboard() {
                           {booking.userName}
                         </div>
                       </td>
+                      <td>{booking.userEmail || 'N/A'}</td>
                       <td>
                         {booking.roomTitle ? (
                           <div>
@@ -408,7 +513,7 @@ function AdminDashboard() {
                             '0'}
                         </div>
                       </td>
-                      <td>{booking.userEmail || 'N/A'}</td>
+                      {/* <td>{booking.userEmail || 'N/A'}</td> */}
                     </tr>
                   ))}
                 </tbody>

@@ -375,7 +375,7 @@ const AdminTrends = () => {
                 <th style={styles.th}>Likes</th>
                 <th style={styles.th}>Engagement</th>
                 <th style={styles.th}>Price</th>
-                <th style={styles.th}>Action</th>
+                {/* <th style={styles.th}>Action</th> */}
               </tr>
             </thead>
             <tbody>
@@ -388,14 +388,14 @@ const AdminTrends = () => {
                   <td style={styles.td}>{r.engagement}%</td>
                   <td style={styles.td}>₹{r.price}</td>
                   <td style={styles.td}>
-                    <button
+                    {/* <button
                       style={styles.btn(true)}
                       onClick={() =>
                         navigate(`/admin/rooms/${r.id}`)
                       }
                     >
                       View
-                    </button>
+                    </button> */}
                   </td>
                 </tr>
               ))}

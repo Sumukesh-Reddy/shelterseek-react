@@ -11,7 +11,7 @@
     --color-accent-soft: #ffe7f0;
     --color-purple: #7c3aed;
   
-    --gradient-accent: linear-gradient(90deg, #d72d6e, #7c3aed);
+    --gradient-accent: linear-gradient(90deg, #622a40, #7c3aed);
   
     --bg-main: #faf7fb;
   
@@ -104,15 +104,16 @@
   }
   
   .admin-dashboard-card-label {
-    font-size: 12px;
+    font-size: 18px;
     text-transform: uppercase;
     letter-spacing: 1.5px;
-    color: var(--text-secondary);
-    margin-bottom: 6px;
+    color: #1f1f1f
+    /* margin-bottom: 6px; */
   }
   
   .admin-dashboard-main-number {
-    font-size: 40px;
+    font-size: 60px;
+    font-weight: 600px;
     font-weight: 800;
     background: var(--gradient-accent);
     -webkit-background-clip: text;
@@ -121,7 +122,7 @@
   
   .admin-dashboard-meta-line {
     font-size: 14px;
-    color: var(--text-secondary);
+    color: #1f1f1f
   }
   
   /* --------------------------------------
@@ -289,4 +290,5 @@
     .admin-dashboard-main-number { font-size: 34px; }
     .admin-dashboard-overview-card { min-height: 160px; }
   }
+  
   
