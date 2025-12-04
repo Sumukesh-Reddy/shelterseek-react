@@ -1206,7 +1206,7 @@ app.get('/api/new-customers', async (req, res) => {
 
 app.get('/api/recent-activities', async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 5;
+    const limit = parseInt(7 || req.query.limit);
     const allActivities = [];
 
     // 1. Get recent bookings
