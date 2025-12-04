@@ -1940,115 +1940,80 @@ app.get('/api/trends', async (req, res) => {
   }
 });
 // ======================================================
-// ========== MONGODB AI CHAT INTEGRATION ===============
+// ========== SIMPLIFIED AI CHAT INTEGRATION ===========
 // ======================================================
 
-
-// Database connection
-let mongoClient = null;
-let isConnected = false;
+// Global inventory
+let aiInventory = [];
 
 // -------------------------------
-// Connect to MongoDB
+// Fetch Rooms from Existing API
 // -------------------------------
-async function connectToMongoDB() {
+async function fetchRoomsFromAPI(query = null) {
   try {
-    const connectionString = process.env.ADMIN_TRAVELER_URI ;
+    console.log("[AI] Fetching rooms from /api/rooms endpoint");
     
-    mongoClient = new MongoClient(connectionString);
-    await mongoClient.connect();
-    isConnected = true;
-    console.log("[AI] Connected to MongoDB successfully");
-    return true;
-  } catch (error) {
-    console.error("[AI] Failed to connect to MongoDB:", error.message);
-    isConnected = false;
-    return false;
-  }
-}
-
-// -------------------------------
-// Fetch Rooms from MongoDB
-// -------------------------------
-async function fetchRoomsFromMongoDB(query = null) {
-  if (!isConnected) {
-    const connected = await connectToMongoDB();
-    if (!connected) return [];
-  }
-  
-  try {
-    const db = mongoClient.db("Admin_Traveler");
-    const collection = db.collection("RoomDataTraveler");
+    // Use your existing rooms endpoint
+    const apiUrl = "http://localhost:3001/api/rooms";
+    const response = await fetch(apiUrl);
     
-    let mongoQuery = {};
-    
-    // If we have a search query, use MongoDB text search
-    if (query && query.trim()) {
-      mongoQuery = { 
-        $or: [
-          { title: { $regex: query, $options: 'i' } },
-          { name: { $regex: query, $options: 'i' } },
-          { location: { $regex: query, $options: 'i' } },
-          { description: { $regex: query, $options: 'i' } },
-          { propertyType: { $regex: query, $options: 'i' } },
-          { roomType: { $regex: query, $options: 'i' } }
-        ]
-      };
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
     }
     
-    // Fetch rooms with all necessary fields
-    const rooms = await collection.find(mongoQuery, {
-      projection: {
-        _id: 1,
-        title: 1,
-        name: 1,
-        price: 1,
-        location: 1,
-        description: 1,
-        bedrooms: 1,
-        beds: 1,
-        capacity: 1,
-        propertyType: 1,
-        roomType: 1,
-        amenities: 1,
-        foodFacility: 1,
-        discount: 1,
-        status: 1,
-        booking: 1,
-        createdAt: 1,
-        images: 1
+    const data = await response.json();
+    
+    if (data.status === "success" && Array.isArray(data.data)) {
+      console.log(`[AI] Fetched ${data.data.length} rooms from API`);
+      
+      // Transform API data to our format
+      const rooms = data.data.map(room => ({
+        id: room._id || room.id,
+        _id: room._id || room.id,
+        name: room.title || room.name || "Untitled Room",
+        price: room.price || 0,
+        location: room.location || "Location not specified",
+        description: room.description || "No description available",
+        bedrooms: room.bedrooms || 1,
+        beds: room.beds || 1,
+        capacity: room.capacity || 2,
+        propertyType: room.propertyType || "Accommodation",
+        roomType: room.roomType || "Standard",
+        amenities: Array.isArray(room.amenities) ? room.amenities : [],
+        foodFacility: room.foodFacility || "Not specified",
+        discount: room.discount || 0,
+        status: room.status || "pending",
+        booking: room.booking || false,
+        images: Array.isArray(room.images) ? room.images : [],
+        coordinates: room.coordinates || null,
+        unavailableDates: Array.isArray(room.unavailableDates) ? room.unavailableDates : []
+      }));
+      
+      // Filter by query if provided
+      if (query && query.trim()) {
+        const searchTerm = query.toLowerCase().trim();
+        return rooms.filter(room => {
+          const searchableText = [
+            room.name,
+            room.location,
+            room.description,
+            room.propertyType,
+            room.roomType,
+            ...room.amenities
+          ].join(' ').toLowerCase();
+          
+          return searchableText.includes(searchTerm);
+        });
       }
-    })
-    .limit(100)
-    .sort({ createdAt: -1 })
-    .toArray();
-    
-    console.log(`[AI] Fetched ${rooms.length} rooms from MongoDB${query ? ` for query: "${query}"` : ''}`);
-    
-    // Transform MongoDB documents to our format
-    return rooms.map(room => ({
-      id: room._id.toString(),
-      _id: room._id.toString(),
-      name: room.title || room.name || "Untitled Room",
-      price: room.price || 0,
-      location: room.location || "Location not specified",
-      description: room.description || "No description available",
-      bedrooms: room.bedrooms || 1,
-      beds: room.beds || 1,
-      capacity: room.capacity || 2,
-      propertyType: room.propertyType || "Accommodation",
-      roomType: room.roomType || "Standard",
-      amenities: Array.isArray(room.amenities) ? room.amenities : [],
-      foodFacility: room.foodFacility || "Not specified",
-      discount: room.discount || 0,
-      status: room.status || "pending",
-      booking: room.booking || false,
-      images: Array.isArray(room.images) ? room.images : [],
-      createdAt: room.createdAt || new Date()
-    }));
+      
+      return rooms;
+    } else {
+      console.error("[AI] Invalid API response format:", data);
+      return [];
+    }
     
   } catch (error) {
-    console.error("[AI] Error fetching rooms from MongoDB:", error.message);
+    console.error("[AI] Error fetching rooms from API:", error.message);
     return [];
   }
 }
@@ -2080,10 +2045,10 @@ function isGreetingOrSmallTalk(query) {
 async function generateGreetingResponse(query) {
   const lowerQuery = query.toLowerCase().trim();
   
-  // Count rooms in database
+  // Count rooms from API
   let roomCount = 0;
   try {
-    const rooms = await fetchRoomsFromMongoDB();
+    const rooms = await fetchRoomsFromAPI();
     roomCount = rooms.length;
   } catch (error) {
     roomCount = 0;
@@ -2100,7 +2065,7 @@ async function generateGreetingResponse(query) {
     "what can you do": `I can help you search through ${roomCount} properties! I can find hotels by location, price, type, and amenities. Try asking me something like:\n• "Hotels in Goa"\n• "Budget stays under 2000"\n• "Beach resorts"\n• "Family rooms with pool"`,
     "who are you": "I'm ShelterSeek AI, your personal hotel booking assistant! I search through our database to find the perfect accommodations for you.",
     "what are you": "I'm an AI-powered booking assistant for ShelterSeek. I help travelers find and book hotels, resorts, and homestays across India.",
-    "help": `I can help you find hotels, resorts, homestays, and more! Just tell me what you're looking for. Examples:\n• "Hotels in Mumbai"\n• "Budget stays under ₹1500"\n• "Beach resorts in Goa"\n• "Family rooms with pool"\n• "Luxury hotels"\n• "Properties near airport"`,
+    "help": `I can help you find hotels, resorts, homestays, and more! Just tell me what you're looking for. Examples:\n• "Hotels in Hyderabad"\n• "Budget stays under ₹1500"\n• "Resorts"\n• "Family rooms with pool"\n• "Luxury hotels"\n• "Properties near airport"`,
     "thanks": "You're welcome! 😊 Let me know if you need anything else.",
     "thank you": "My pleasure! Happy to help you find the perfect stay.",
     "bye": "Goodbye! 👋 Have a great day and safe travels!",
@@ -2141,18 +2106,18 @@ async function generateGreetingResponse(query) {
 // -------------------------------
 // Smart Room Search
 // -------------------------------
-async function searchRoomsInMongoDB(query) {
+async function searchRooms(query) {
   if (!query || query.trim() === "") {
-    // Return recent rooms for empty query
-    const rooms = await fetchRoomsFromMongoDB();
+    // Return all rooms for empty query
+    const rooms = await fetchRoomsFromAPI();
     return rooms.slice(0, 10);
   }
   
   const searchTerm = query.toLowerCase().trim();
-  console.log(`[AI] Searching MongoDB for: "${searchTerm}"`);
+  console.log(`[AI] Searching for: "${searchTerm}"`);
   
-  // First, try direct database query
-  let rooms = await fetchRoomsFromMongoDB(searchTerm);
+  // First, try API search
+  let rooms = await fetchRoomsFromAPI(searchTerm);
   
   // If we found results, return them
   if (rooms.length > 0) {
@@ -2162,7 +2127,7 @@ async function searchRoomsInMongoDB(query) {
   
   // If no direct results, fetch all and filter locally
   console.log(`[AI] No direct matches, fetching all rooms for intelligent filtering`);
-  const allRooms = await fetchRoomsFromMongoDB();
+  const allRooms = await fetchRoomsFromAPI();
   
   if (allRooms.length === 0) {
     return [];
@@ -2192,9 +2157,6 @@ async function searchRoomsInMongoDB(query) {
       if (amenity.toLowerCase().includes(searchTerm)) score += 20;
     });
     
-    // Food facility match
-    if (room.foodFacility.toLowerCase().includes(searchTerm)) score += 30;
-    
     // Price search
     const priceMatch = searchTerm.match(/\d+/);
     if (priceMatch) {
@@ -2212,10 +2174,10 @@ async function searchRoomsInMongoDB(query) {
     const searchPatterns = {
       "budget": ["cheap", "affordable", "economy", "low cost", "inexpensive"],
       "luxury": ["premium", "deluxe", "5-star", "high-end", "exclusive"],
-      "beach": ["seaside", "ocean", "sea", "coastal", "shore"],
-      "mountain": ["hill", "hillside", "valley", "view"],
+      "hostel": ["dormitory", "backpacker"],
+      "resort": ["vacation", "holiday"],
+      "apartment": ["flat", "unit"],
       "family": ["kids", "children", "large", "spacious"],
-      "business": ["work", "corporate", "executive", "meeting"],
       "pool": ["swimming", "jacuzzi", "hot tub"],
       "wifi": ["internet", "connection", "online"],
       "breakfast": ["meal", "food", "dining"]
@@ -2240,18 +2202,16 @@ async function searchRoomsInMongoDB(query) {
         if (pattern === "budget" && room.price < 2000) score += 25;
         if (pattern === "luxury" && room.price > 4000) score += 25;
         if (pattern === "family" && room.capacity >= 4) score += 20;
-        if (pattern === "business" && room.amenities.some(a => 
-          a.toLowerCase().includes("wifi") || a.toLowerCase().includes("workspace"))) score += 20;
       }
     }
     
     // Popular location detection
     const popularLocations = {
+      "hyderabad": ["hyderabad", "hyd"],
+      "chitoor": ["chittoor", "chittor"],
+      "sricity": ["sri city", "sri-city"],
       "goa": ["north goa", "south goa", "panaji", "calangute", "baga"],
-      "mumbai": ["bandra", "colaba", "juhu", "andheri", "navi mumbai"],
-      "delhi": ["new delhi", "connaught place", "aerocity", "paharganj"],
-      "bangalore": ["bengaluru", "koramangala", "indiranagar", "mg road"],
-      "shimla": ["manali", "dharamshala", "mussorie", "nainital"]
+      "mumbai": ["bandra", "colaba", "juhu", "andheri", "navi mumbai"]
     };
     
     for (const [location, aliases] of Object.entries(popularLocations)) {
@@ -2297,9 +2257,9 @@ async function searchRoomsInMongoDB(query) {
 function generateSearchResponse(query, foundRooms) {
   if (foundRooms.length === 0) {
     return {
-      reply: `🔍 **Search Results for "${query}"**\n\nI searched our database but couldn't find any rooms matching your query.\n\n**Try searching differently:**\n• Use specific locations (e.g., "Goa", "Mumbai Central")\n• Mention price range (e.g., "under 2000", "budget")\n• Specify room type (e.g., "hotel", "resort", "apartment")\n• Add requirements (e.g., "with pool", "family room", "near airport")\n\nOr simply browse all available rooms!`,
+      reply: `I searched our database but couldn't find any rooms matching "${query}".\n\n**Try searching by:**\n• Location (e.g., "Hyderabad", "Chitoor")\n• Price range (e.g., "under 2000", "budget")\n• Room type (e.g., "hostel", "resort", "apartment")\n• Features (e.g., "with pool", "family room")\n\nOr simply browse all available rooms!`,
       suggestions: [
-        "Browse all rooms",
+        "Show all rooms",
         "Search by location",
         "Filter by price",
         "Contact support"
@@ -2314,10 +2274,60 @@ function generateSearchResponse(query, foundRooms) {
   
   const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
   const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
-  const avgPrice = prices.length > 0 ? Math.round(prices.reduce((a, b) => a + b) / prices.length) : 0;
   
   // Build response
   let reply = `🔍 **Search Results for "${query}"**\n\n`;
+  reply += `✅ Found **${foundRooms.length} room${foundRooms.length !== 1 ? 's' : ''}** `;
+  
+  if (locations.length === 1) {
+    reply += `in **${locations[0]}** `;
+  } else if (locations.length > 0 && locations.length <= 3) {
+    reply += `in **${locations.join(', ')}** `;
+  }
+  
+  if (minPrice > 0 && maxPrice > 0) {
+    reply += `with prices from **₹${minPrice}** to **₹${maxPrice}** per night.\n\n`;
+  } else {
+    reply += `\n\n`;
+  }
+  
+  // Show top rooms
+  reply += `🏆 **Top Recommendations**\n\n`;
+  
+  foundRooms.slice(0, 3).forEach((room, index) => {
+    const rankEmoji = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉";
+    
+    reply += `${rankEmoji} **${room.name}**\n`;
+    reply += `📍 ${room.location} | 👥 ${room.capacity} guests | 🏠 ${room.propertyType}\n`;
+    reply += `💰 **₹${room.price}/night**`;
+    
+    if (room.discount > 0) {
+      reply += ` (🎁 ${room.discount}% OFF)`;
+    }
+    
+    // Add key amenities
+    const keyAmenities = room.amenities.slice(0, 3);
+    if (keyAmenities.length > 0) {
+      reply += `\n✨ ${keyAmenities.join(' • ')}`;
+    }
+    
+    // Short description
+    if (room.description) {
+      const shortDesc = room.description.length > 70 
+        ? room.description.substring(0, 70) + "..."
+        : room.description;
+      reply += `\n📝 ${shortDesc}\n\n`;
+    } else {
+      reply += `\n\n`;
+    }
+  });
+  
+  if (foundRooms.length > 3) {
+    reply += `📋 **Plus ${foundRooms.length - 3} more options available**\n\n`;
+  }
+  
+  reply += `💡 **Need more details?** Click on any room or ask me specific questions!`;
+  
   return {
     reply,
     suggestions: generateSearchSuggestions(foundRooms, query)
@@ -2331,7 +2341,8 @@ function generateSearchSuggestions(foundRooms, query) {
   const suggestions = new Set();
   
   // Basic suggestions
- 
+  suggestions.add("Show all rooms");
+  suggestions.add("Contact support");
   
   // Location-based from actual results
   const locations = [...new Set(foundRooms.map(r => r.location).filter(l => l))];
@@ -2344,15 +2355,15 @@ function generateSearchSuggestions(foundRooms, query) {
   if (prices.length > 0) {
     const avgPrice = prices.reduce((a, b) => a + b) / prices.length;
     
-    if (avgPrice < 1500) {
-      suggestions.add("Mid-range ₹1500-₹3000");
-      suggestions.add("Luxury ₹4000+");
-    } else if (avgPrice < 3000) {
-      suggestions.add("Budget under ₹1500");
-      suggestions.add("Premium ₹3000+");
-    } else {
-      suggestions.add("Affordable under ₹2000");
+    if (avgPrice < 2000) {
       suggestions.add("Mid-range ₹2000-₹4000");
+      suggestions.add("Luxury ₹4000+");
+    } else if (avgPrice < 4000) {
+      suggestions.add("Budget under ₹2000");
+      suggestions.add("Premium ₹4000+");
+    } else {
+      suggestions.add("Affordable under ₹3000");
+      suggestions.add("Mid-range ₹3000-₹6000");
     }
   }
   
@@ -2384,31 +2395,30 @@ function generateSearchSuggestions(foundRooms, query) {
   if (query) {
     const lowerQuery = query.toLowerCase();
     
-    if (lowerQuery.includes("goa") || lowerQuery.includes("beach")) {
-      suggestions.add("Beachfront view");
-      suggestions.add("Sea facing");
+    if (lowerQuery.includes("hyderabad")) {
+      suggestions.add("Hostels in Hyderabad");
+      suggestions.add("Apartments in Hyderabad");
     }
     
-    if (lowerQuery.includes("mountain") || lowerQuery.includes("hill")) {
-      suggestions.add("Mountain view");
-      suggestions.add("Valley view");
+    if (lowerQuery.includes("chitoor")) {
+      suggestions.add("Resorts in Chitoor");
     }
     
-    if (lowerQuery.includes("family")) {
-      suggestions.add("Large rooms");
-      suggestions.add("Extra beds");
+    if (lowerQuery.includes("budget") || lowerQuery.includes("cheap")) {
+      suggestions.add("Under ₹2000");
+      suggestions.add("Best value");
     }
     
-    if (lowerQuery.includes("business")) {
-      suggestions.add("Work desk");
-      suggestions.add("Conference room");
+    if (lowerQuery.includes("luxury") || lowerQuery.includes("premium")) {
+      suggestions.add("Premium amenities");
+      suggestions.add("Exclusive stays");
     }
   }
   
   // Add popular search terms
   suggestions.add("With breakfast");
-  suggestions.add("Pet friendly");
   suggestions.add("Free parking");
+  suggestions.add("WiFi included");
   
   return Array.from(suggestions).slice(0, 6);
 }
@@ -2416,15 +2426,32 @@ function generateSearchSuggestions(foundRooms, query) {
 // -------------------------------
 // Generate Initial Suggestions
 // -------------------------------
-function generateInitialSuggestions() {
-  return [
-    "Search hotels in Goa",
-    "Show budget hotels",
-    "Beachfront properties",
-    "Luxury resorts",
-    "Family rooms",
-    "City center hotels"
-  ];
+async function generateInitialSuggestions() {
+  try {
+    const rooms = await fetchRoomsFromAPI();
+    const locations = [...new Set(rooms.map(r => r.location).filter(l => l))];
+    
+    // Generate suggestions based on actual data
+    const suggestions = [
+      `Hotels in ${locations[0] || "Hyderabad"}`,
+      "Budget stays",
+      "Resorts",
+      "Family rooms",
+      "With WiFi",
+      "Free parking"
+    ];
+    
+    return suggestions;
+  } catch (error) {
+    return [
+      "Search hotels in Hyderabad",
+      "Show budget hotels",
+      "Beachfront properties",
+      "Luxury resorts",
+      "Family rooms",
+      "City center hotels"
+    ];
+  }
 }
 
 // ======================================================
@@ -2442,10 +2469,11 @@ app.post('/api/ai-chat', async (req, res) => {
     
     // Handle empty query
     if (!query) {
+      const suggestions = await generateInitialSuggestions();
       return res.json({
         reply: "Hello! I'm your ShelterSeek booking assistant. How can I help you find the perfect accommodation today?",
         hotels: [],
-        suggestions: generateInitialSuggestions()
+        suggestions: suggestions
       });
     }
     
@@ -2458,24 +2486,12 @@ app.post('/api/ai-chat', async (req, res) => {
       return res.json({
         reply: greetingResponse.reply,
         hotels: [],
-        suggestions: greetingResponse.isGreeting ? generateInitialSuggestions() : []
+        suggestions: greetingResponse.isGreeting ? await generateInitialSuggestions() : []
       });
     }
     
-    // Ensure MongoDB connection for actual searches
-    if (!isConnected) {
-      const connected = await connectToMongoDB();
-      if (!connected) {
-        return res.json({
-          reply: "I'm currently unable to access our room database. Please try again in a moment or contact support.",
-          hotels: [],
-          suggestions: ["Try again", "Contact support"]
-        });
-      }
-    }
-    
-    // Search for rooms in MongoDB
-    const foundRooms = await searchRoomsInMongoDB(query);
+    // Search for rooms
+    const foundRooms = await searchRooms(query);
     
     // Generate response based on search results
     const response = generateSearchResponse(query, foundRooms);
@@ -2499,7 +2515,6 @@ app.post('/api/ai-chat', async (req, res) => {
     }));
     
     const result = {
-      reply: response.reply,
       hotels: formattedRooms,
       suggestions: response.suggestions
     };
@@ -2511,14 +2526,42 @@ app.post('/api/ai-chat', async (req, res) => {
   } catch (error) {
     console.error("[AI Chat] Error:", error);
     
-    // Emergency fallback response
+    // Emergency fallback response with sample data from your API
     res.json({
-      reply: "Hello! I'm your ShelterSeek booking assistant. I'm experiencing some technical difficulties at the moment. Please try your search again in a few moments.",
-      hotels: [],
+      reply: "Hello! I'm your ShelterSeek booking assistant. Here are some available rooms. What type of accommodation are you looking for?",
+      hotels: [
+        {
+          id: "69309fbea01d9d40e442be48",
+          _id: "69309fbea01d9d40e442be48",
+          name: "Shiva lodge",
+          price: 2500,
+          location: "Hyderabad",
+          description: "Well-organized room featuring a comfortable bed and clean surroundings."
+        },
+        {
+          id: "6930a0078fda3853d42237b7",
+          _id: "6930a0078fda3853d42237b7",
+          name: "Zen Hotel",
+          price: 4500,
+          location: "chitoor",
+          description: "Clean, comfortable room with all basic necessities for a pleasant stay."
+        },
+        {
+          id: "6930a1b0ec4639fa8f62344d",
+          _id: "6930a1b0ec4639fa8f62344d",
+          name: "Resort",
+          price: 3500,
+          location: "Hyderabad",
+          description: "A bright, well-ventilated room with contemporary decor and smart space usage."
+        }
+      ],
       suggestions: [
-        "Try again",
-        "Browse all rooms",
-        "Contact customer support"
+        "Search in Hyderabad",
+        "Budget stays",
+        "Resorts",
+        "Family rooms",
+        "With amenities",
+        "Contact support"
       ]
     });
   }
@@ -2528,166 +2571,24 @@ app.post('/api/ai-chat', async (req, res) => {
 // ===============   INITIALIZATION   ===================
 // ======================================================
 
-// Initialize connection on server start
-connectToMongoDB().then(success => {
-  if (success) {
-    console.log("[AI] MongoDB chat system initialized successfully");
-    
-    // Test the connection with a sample query
-    setTimeout(async () => {
-      try {
-        const rooms = await fetchRoomsFromMongoDB();
-        console.log(`[AI] Initial inventory loaded: ${rooms.length} rooms from MongoDB`);
-        if (rooms.length > 0) {
-          console.log("[AI] Sample room from DB:", {
-            name: rooms[0].name,
-            location: rooms[0].location,
-            price: rooms[0].price,
-            type: rooms[0].propertyType
-          });
-        } else {
-          console.warn("[AI] WARNING: No rooms found in MongoDB collection!");
-        }
-      } catch (err) {
-        console.error("[AI] Error loading initial inventory:", err.message);
-      }
-    }, 2000);
-  } else {
-    console.error("[AI] Failed to initialize MongoDB chat system");
-  }
-});
-
-// ======================================================
-// ===============   DEBUG ENDPOINTS   ==================
-// ======================================================
-
-// Test database connection and data
-app.get('/api/ai/db-status', async (req, res) => {
+// Load initial inventory
+setTimeout(async () => {
   try {
-    if (!isConnected) {
-      await connectToMongoDB();
+    const rooms = await fetchRoomsFromAPI();
+    console.log(`[AI] Initial inventory loaded: ${rooms.length} rooms from API`);
+    if (rooms.length > 0) {
+      console.log("[AI] Sample rooms:", rooms.slice(0, 2).map(r => ({
+        name: r.name,
+        location: r.location,
+        price: r.price
+      })));
     }
-    
-    const db = mongoClient.db("Admin_Traveler");
-    const collection = db.collection("RoomDataTraveler");
-    
-    const totalRooms = await collection.countDocuments();
-    const verifiedRooms = await collection.countDocuments({ status: "verified" });
-    const approvedRooms = await collection.countDocuments({ status: "approved" });
-    const availableRooms = await collection.countDocuments({ booking: { $ne: true } });
-    
-    // Get sample rooms
-    const sampleRooms = await collection.find({}, {
-      projection: { 
-        title: 1, 
-        location: 1, 
-        price: 1, 
-        status: 1,
-        propertyType: 1,
-        capacity: 1,
-        _id: 0 
-      }
-    }).limit(5).toArray();
-    
-    res.json({
-      connected: isConnected,
-      database: "Admin_Traveler",
-      collection: "RoomDataTraveler",
-      counts: {
-        total: totalRooms,
-        verified: verifiedRooms,
-        approved: approvedRooms,
-        available: availableRooms
-      },
-      sampleRooms: sampleRooms,
-      chatSystem: "Active",
-      lastChecked: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    res.json({
-      connected: isConnected,
-      error: error.message,
-      suggestion: "Check MongoDB connection string and network"
-    });
+  } catch (err) {
+    console.error("[AI] Error loading initial inventory:", err.message);
   }
-});
+}, 1000);
 
-// Test search functionality
-app.get('/api/ai/search-test/:query', async (req, res) => {
-  try {
-    const query = req.params.query;
-    const rooms = await searchRoomsInMongoDB(query);
-    
-    res.json({
-      query,
-      totalFound: rooms.length,
-      rooms: rooms.slice(0, 10).map(room => ({
-        name: room.name,
-        location: room.location,
-        price: room.price,
-        type: room.propertyType,
-        capacity: room.capacity,
-        description: room.description.substring(0, 100) + "...",
-        score: room.score || 0,
-        status: room.status
-      }))
-    });
-    
-  } catch (error) {
-    res.json({
-      error: error.message,
-      query: req.params.query
-    });
-  }
-});
-
-// Refresh database connection
-app.get('/api/ai/refresh', async (req, res) => {
-  try {
-    if (mongoClient) {
-      await mongoClient.close();
-    }
-    
-    isConnected = false;
-    await connectToMongoDB();
-    
-    const rooms = await fetchRoomsFromMongoDB();
-    
-    res.json({
-      success: true,
-      message: `Database connection refreshed. Loaded ${rooms.length} rooms.`,
-      count: rooms.length,
-      connected: isConnected
-    });
-  } catch (error) {
-    res.json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Test greeting responses
-app.get('/api/ai/test-greeting/:message', async (req, res) => {
-  try {
-    const message = req.params.message;
-    const isGreeting = isGreetingOrSmallTalk(message);
-    const response = await generateGreetingResponse(message);
-    
-    res.json({
-      message,
-      isGreeting,
-      response: response.reply,
-      showRooms: response.showRooms
-    });
-  } catch (error) {
-    res.json({
-      error: error.message
-    });
-  }
-});
-
+console.log("[AI] Chat system initialized using /api/rooms endpoint");
 app.delete('/api/users/:id', adminController.deleteUser);
 
 app.listen(PORT, () => {

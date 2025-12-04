@@ -237,15 +237,18 @@ export default function Profile() {
                 Messages
               </button>
 
+              {currentUser.accountType === "traveller" && (
               <button
                 onClick={() => navigate("/BookedHistory")}
                 className="btn btn-secondary"
               >
                 Booked History
               </button>
+              )}
               <button onClick={logout} className="btn btn-danger">
                 Logout
               </button>
+            
 
             </div>
           </div>
