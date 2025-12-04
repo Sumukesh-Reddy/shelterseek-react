@@ -6,7 +6,7 @@ import { faArrowLeft } from "@fortawesome/free-solid-svg-icons";
 import {
   faUser, faHome, faCalendar, faDollarSign, faSignOutAlt,
   faEdit, faTrash, faImages, faStar, faAlignLeft, faRupeeSign,
-  faCalendarCheck, faFilter, faTimes
+  faCalendarCheck, faFilter, faTimes, faSyncAlt, faComment, faEnvelope, faPhone, faIdCard, faUserFriends, faInfoCircle
 } from '@fortawesome/free-solid-svg-icons';
 import {
   BarChart,
@@ -160,19 +160,19 @@ const styles = {
     fontSize: '0.875rem',
   },
   backButton: {
-  display: 'flex',
-  alignItems: 'center',
-  padding: '0.75rem 1rem',
-  borderRadius: '0.375rem',
-  color: '#4b5563',     // same as navLink text color
-  textDecoration: 'none',
-  transition: 'all 0.2s',
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-  textAlign: 'left',
-  fontSize: '1rem',
-},
+    display: 'flex',
+    alignItems: 'center',
+    padding: '0.75rem 1rem',
+    borderRadius: '0.375rem',
+    color: '#4b5563',
+    textDecoration: 'none',
+    transition: 'all 0.2s',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    textAlign: 'left',
+    fontSize: '1rem',
+  },
   suggestionsSimpleSuccess: {
     margin: '1rem 0',
     padding: '0.75rem',
@@ -182,7 +182,6 @@ const styles = {
     fontSize: '0.875rem',
     color: '#16a34a',
   },
-  
   suggestionsStrong: { color: '#d72d6e', fontWeight: 600 },
   suggestionsStrongSuccess: { color: '#16a34a', fontWeight: 600 },
   suggestionsList: { margin: '0.5rem 0 0 0', paddingLeft: '1.25rem' },
@@ -204,6 +203,10 @@ const HostDashboard = () => {
   });
   const [analytics, setAnalytics] = useState({});
   const [qrCodes, setQrCodes] = useState({});
+  const [realTimeBookings, setRealTimeBookings] = useState([]);
+  const [lastUpdate, setLastUpdate] = useState(null);
+  const [pollingInterval, setPollingInterval] = useState(null);
+  const [expandedBookingId, setExpandedBookingId] = useState(null);
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('currentUser') || 'null');
@@ -216,6 +219,25 @@ const HostDashboard = () => {
     fetchListings(user.email);
     fetchAnalytics();
   }, [navigate]);
+
+  useEffect(() => {
+    if (currentUser && currentUser.accountType === 'host') {
+      // Initial fetch
+      fetchHostBookings();
+      
+      // Set up polling interval (every 1 second)
+      const interval = setInterval(() => {
+        fetchHostBookings();
+      }, 1000);
+      
+      setPollingInterval(interval);
+      
+      // Cleanup interval on component unmount
+      return () => {
+        if (interval) clearInterval(interval);
+      };
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     const filtered = listings.filter(listing => {
@@ -267,6 +289,22 @@ const HostDashboard = () => {
       }
     } catch (error) {
       console.error('Failed to fetch analytics:', error);
+    }
+  };
+
+  const fetchHostBookings = async () => {
+    try {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const response = await axios.get(`${API_BASE_URL}/api/bookings/host`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (response.data.success) {
+        setRealTimeBookings(response.data.bookings);
+        setLastUpdate(new Date());
+      }
+    } catch (error) {
+      console.error('Failed to fetch host bookings:', error);
     }
   };
 
@@ -356,7 +394,57 @@ const HostDashboard = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const formatBookingTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = (now - date) / 1000;
+    
+    if (diffInSeconds < 60) {
+      return 'Just now';
+    } else if (diffInSeconds < 3600) {
+      return `${Math.floor(diffInSeconds / 60)}m ago`;
+    } else if (diffInSeconds < 86400) {
+      return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    } else {
+      return date.toLocaleDateString();
+    }
+  };
+
+  const isRecentBooking = (booking) => {
+    const bookingTime = new Date(booking.bookedAt || booking.createdAt || booking.paymentDate);
+    const now = new Date();
+    const diffInSeconds = (now - bookingTime) / 1000;
+    return diffInSeconds < 60;
+  };
+
+  const getStatusColor = (status) => {
+    switch(status?.toLowerCase()) {
+      case 'confirmed':
+      case 'completed':
+        return { bg: '#dcfce7', text: '#166534' };
+      case 'pending':
+        return { bg: '#fef3c7', text: '#92400e' };
+      case 'cancelled':
+        return { bg: '#fee2e2', text: '#991b1b' };
+      default:
+        return { bg: '#e5e7eb', text: '#374151' };
+    }
+  };
+
+  const toggleBookingDetails = (bookingId) => {
+    if (expandedBookingId === bookingId) {
+      setExpandedBookingId(null);
+    } else {
+      setExpandedBookingId(bookingId);
+    }
   };
 
   const handleSectionChange = (section) => setActiveSection(section);
@@ -391,7 +479,6 @@ const HostDashboard = () => {
     const qrData = qrCodes[listingId];
     if (!qrData) return;
 
-    // Create a temporary link to download the image
     const link = document.createElement('a');
     link.href = qrData.qrCode;
     link.download = `QR_${title.replace(/\s+/g, '_')}.png`;
@@ -413,12 +500,10 @@ const HostDashboard = () => {
         });
       } catch (error) {
         console.error('Error sharing:', error);
-        // Fallback to copying URL
         navigator.clipboard.writeText(qrData.listingUrl);
         alert('Listing URL copied to clipboard!');
       }
     } else {
-      // Fallback for browsers that don't support Web Share API
       navigator.clipboard.writeText(qrData.listingUrl);
       alert('Listing URL copied to clipboard!');
     }
@@ -427,6 +512,18 @@ const HostDashboard = () => {
   const clearAllQRCodes = () => {
     setQrCodes({});
     alert('All QR codes cleared. Generate fresh ones!');
+  };
+
+  const getGovtIdTypeName = (type) => {
+    switch(type) {
+      case 'aadhar': return 'Aadhar Card';
+      case 'pan_card': return 'PAN Card';
+      case 'passport': return 'Passport';
+      case 'driving_license': return 'Driving License';
+      case 'voter_id': return 'Voter ID';
+      case 'other': return 'Other ID';
+      default: return type || 'Not specified';
+    }
   };
 
   if (!currentUser) return <div style={{ padding: '2rem' }}>Loading...</div>;
@@ -441,12 +538,12 @@ const HostDashboard = () => {
         </div>
         <nav style={styles.navLinks}>
           <button
-  type="button"
-  onClick={() => navigate('/host_index')}
-  style={styles.navLink}
->
-  <FontAwesomeIcon icon={faArrowLeft} style={styles.navLinkIcon} /> Back
-</button>
+            type="button"
+            onClick={() => navigate('/host_index')}
+            style={styles.navLink}
+          >
+            <FontAwesomeIcon icon={faArrowLeft} style={styles.navLinkIcon} /> Back
+          </button>
           <button type="button" onClick={() => navigate('/profile')} style={styles.navLink}>
             <FontAwesomeIcon icon={faUser} style={styles.navLinkIcon} /> Profile
           </button>
@@ -470,141 +567,470 @@ const HostDashboard = () => {
 
       {/* Main Content */}
       <div style={styles.mainContent}>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>
-          {activeSection === 'overview' ? 'Overview' :
-           activeSection === 'bookings' ? 'Bookings' :
-           activeSection === 'earnings' ? 'Earnings' :
-           activeSection === 'qr-codes' ? 'QR Codes' : 'Overview'}
-        </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+            {activeSection === 'overview' ? 'Overview' :
+             activeSection === 'bookings' ? 'Bookings' :
+             activeSection === 'earnings' ? 'Earnings' :
+             activeSection === 'qr-codes' ? 'QR Codes' : 'Overview'}
+          </h2>
+          
+          <button
+            onClick={() => {
+              fetchHostBookings();
+              fetchAnalytics();
+            }}
+            style={{
+              padding: '0.5rem 1rem',
+              backgroundColor: '#d72d6e',
+              color: 'white',
+              border: 'none',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            <FontAwesomeIcon icon={faSyncAlt} /> Refresh Now
+          </button>
+        </div>
 
         {/* Overview Section */}
         {activeSection === 'overview' && (
-          <div style={styles.listingsSection}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={styles.sectionTitle}>Your Listings</h3>
-              <button
-                onClick={() => setShowFilter(true)}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: '#d72d6e',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-              >
-                <FontAwesomeIcon icon={faFilter} /> Filter
-              </button>
-            </div>
+          <>
+            <div style={styles.listingsSection}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h3 style={styles.sectionTitle}>Your Listings</h3>
+                <button
+                  onClick={() => setShowFilter(true)}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    backgroundColor: '#d72d6e',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '1rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  <FontAwesomeIcon icon={faFilter} /> Filter
+                </button>
+              </div>
 
-            <div style={styles.searchContainer}>
-              <input
-                type="text"
-                placeholder="Search by title or location..."
-                style={styles.searchBar}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+              <div style={styles.searchContainer}>
+                <input
+                  type="text"
+                  placeholder="Search by title or location..."
+                  style={styles.searchBar}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
 
-            <div style={styles.listingsContainer}>
-              {filteredListings.length === 0 ? (
-                <p>No listings found. Create your first listing!</p>
-              ) : (
-                filteredListings.map((listing) => {
-                  const suggestions = generateSuggestions(listing);
-                  let statusStyle = { ...styles.listingStatusBase };
-                  if (listing.status === 'active') statusStyle = { ...statusStyle, ...styles.listingStatusActive };
-                  else if (listing.status === 'inactive') statusStyle = { ...statusStyle, ...styles.listingStatusInactive };
-                  else if (listing.status === 'pending') statusStyle = { ...statusStyle, ...styles.listingStatusPending };
-                  else if (listing.status === 'verified') statusStyle = { ...statusStyle, ...styles.listingStatusVerified };
-                  else if (listing.status === 'rejected') statusStyle = { ...statusStyle, ...styles.listingStatusRejected };
+              <div style={styles.listingsContainer}>
+                {filteredListings.length === 0 ? (
+                  <p>No listings found. Create your first listing!</p>
+                ) : (
+                  filteredListings.map((listing) => {
+                    const suggestions = generateSuggestions(listing);
+                    let statusStyle = { ...styles.listingStatusBase };
+                    if (listing.status === 'active') statusStyle = { ...statusStyle, ...styles.listingStatusActive };
+                    else if (listing.status === 'inactive') statusStyle = { ...statusStyle, ...styles.listingStatusInactive };
+                    else if (listing.status === 'pending') statusStyle = { ...statusStyle, ...styles.listingStatusPending };
+                    else if (listing.status === 'verified') statusStyle = { ...statusStyle, ...styles.listingStatusVerified };
+                    else if (listing.status === 'rejected') statusStyle = { ...statusStyle, ...styles.listingStatusRejected };
 
-                  return (
-                    <div key={listing._id} style={styles.listingCard}>
-                      <div style={styles.listingHeader}>
-                        <h4 style={styles.listingCardTitle}>{listing.title}</h4>
-                        <div style={statusStyle}>{listing.status}</div>
-                      </div>
+                    return (
+                      <div key={listing._id} style={styles.listingCard}>
+                        <div style={styles.listingHeader}>
+                          <h4 style={styles.listingCardTitle}>{listing.title}</h4>
+                          <div style={statusStyle}>{listing.status}</div>
+                        </div>
 
-                      <div style={styles.listingDetails}>
-                        <p><strong>Description:</strong> {listing.description}</p>
-                        <p><strong>Price:</strong> ₹{listing.price}</p>
-                        <p><strong>Location:</strong> {listing.location}</p>
-                        <p><strong>Coordinates:</strong> ({listing.coordinates?.lat || 'N/A'}, {listing.coordinates?.lng || 'N/A'})</p>
-                        <p><strong>Max Days Allowed:</strong> {listing.maxdays}</p>
-                        <p><strong>Property Type:</strong> {listing.propertyType}</p>
-                        <p><strong>Capacity:</strong> {listing.capacity}</p>
-                        <p><strong>Room Type:</strong> {listing.roomType}</p>
-                        <p><strong>Bedrooms:</strong> {listing.bedrooms}</p>
-                        <p><strong>Beds:</strong> {listing.beds}</p>
-                        <p><strong>Room Size:</strong> {listing.roomSize}</p>
-                        <p><strong>Room Location:</strong> {listing.roomLocation || 'Not specified'}</p>
-                        <p><strong>Transport Distance:</strong> {listing.transportDistance || 'Not specified'}</p>
-                        <p><strong>Host Gender:</strong> {listing.hostGender || 'Not specified'}</p>
-                        <p><strong>Food Facility:</strong> {listing.foodFacility || 'Not specified'}</p>
-                        <p><strong>Amenities:</strong> {listing.amenities?.join(', ') || 'None'}</p>
-                        <p><strong>Discount:</strong> {listing.discount || 0}%</p>
-                        <p><strong>Likes:</strong> {listing.likes || 0}</p>
-                        <p><strong>Status:</strong> {listing.status}</p>
-                        <p><strong>Booking Available:</strong> {listing.booking ? 'Yes' : 'No'}</p>
-                        <p><strong>Reviews:</strong> {listing.reviews?.join(', ') || 'None'}</p>
-                        <p><strong>Unavailable Days:</strong> {listing.unavailableDates && listing.unavailableDates.length > 0 ? listing.unavailableDates.join(', ') : 'None'}</p>
-                        <p><strong>Created At:</strong> {formatDate(listing.createdAt)}</p>
-                      </div>
+                        <div style={styles.listingDetails}>
+                          <p><strong>Description:</strong> {listing.description}</p>
+                          <p><strong>Price:</strong> ₹{listing.price}</p>
+                          <p><strong>Location:</strong> {listing.location}</p>
+                          <p><strong>Coordinates:</strong> ({listing.coordinates?.lat || 'N/A'}, {listing.coordinates?.lng || 'N/A'})</p>
+                          <p><strong>Max Days Allowed:</strong> {listing.maxdays}</p>
+                          <p><strong>Property Type:</strong> {listing.propertyType}</p>
+                          <p><strong>Capacity:</strong> {listing.capacity}</p>
+                          <p><strong>Room Type:</strong> {listing.roomType}</p>
+                          <p><strong>Bedrooms:</strong> {listing.bedrooms}</p>
+                          <p><strong>Beds:</strong> {listing.beds}</p>
+                          <p><strong>Room Size:</strong> {listing.roomSize}</p>
+                          <p><strong>Room Location:</strong> {listing.roomLocation || 'Not specified'}</p>
+                          <p><strong>Transport Distance:</strong> {listing.transportDistance || 'Not specified'}</p>
+                          <p><strong>Host Gender:</strong> {listing.hostGender || 'Not specified'}</p>
+                          <p><strong>Food Facility:</strong> {listing.foodFacility || 'Not specified'}</p>
+                          <p><strong>Amenities:</strong> {listing.amenities?.join(', ') || 'None'}</p>
+                          <p><strong>Discount:</strong> {listing.discount || 0}%</p>
+                          <p><strong>Likes:</strong> {listing.likes || 0}</p>
+                          <p><strong>Status:</strong> {listing.status}</p>
+                          <p><strong>Booking Available:</strong> {listing.booking ? 'Yes' : 'No'}</p>
+                          <p><strong>Reviews:</strong> {listing.reviews?.join(', ') || 'None'}</p>
+                          <p><strong>Unavailable Days:</strong> {listing.unavailableDates && listing.unavailableDates.length > 0 ? listing.unavailableDates.join(', ') : 'None'}</p>
+                          <p><strong>Created At:</strong> {formatDate(listing.createdAt)}</p>
+                        </div>
 
-                      <div style={suggestions.length > 0 ? styles.suggestionsSimple : styles.suggestionsSimpleSuccess}>
-                        <strong style={suggestions.length > 0 ? styles.suggestionsStrong : styles.suggestionsStrongSuccess}>
-                          Suggestions:
-                        </strong>
-                        {suggestions.length > 0 ? (
-                          <ul style={styles.suggestionsList}>
-                            {suggestions.map((s, i) => (
-                              <li key={i} style={styles.suggestionsListItem}>
-                                <FontAwesomeIcon icon={s.icon} /> {s.message}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p style={{ marginTop: '0.5rem' }}>Your listing looks great!</p>
+                        <div style={suggestions.length > 0 ? styles.suggestionsSimple : styles.suggestionsSimpleSuccess}>
+                          <strong style={suggestions.length > 0 ? styles.suggestionsStrong : styles.suggestionsStrongSuccess}>
+                            Suggestions:
+                          </strong>
+                          {suggestions.length > 0 ? (
+                            <ul style={styles.suggestionsList}>
+                              {suggestions.map((s, i) => (
+                                <li key={i} style={styles.suggestionsListItem}>
+                                  <FontAwesomeIcon icon={s.icon} /> {s.message}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p style={{ marginTop: '0.5rem' }}>Your listing looks great!</p>
+                          )}
+                        </div>
+
+                        {listing.images && listing.images.length > 0 && (
+                          <div style={styles.imagesContainer}>
+                            <strong>Images:</strong>
+                            <div style={styles.imageGallery}>
+                              {listing.images.map((imgId, idx) => (
+                                <img key={idx} src={`${API_BASE_URL}/api/images/${imgId}`} alt="Listing" style={styles.listingImage} />
+                              ))}
+                            </div>
+                          </div>
                         )}
-                      </div>
 
-                      {listing.images && listing.images.length > 0 && (
-                        <div style={styles.imagesContainer}>
-                          <strong>Images:</strong>
-                          <div style={styles.imageGallery}>
-                            {listing.images.map((imgId, idx) => (
-                              <img key={idx} src={`${API_BASE_URL}/api/images/${imgId}`} alt="Listing" style={styles.listingImage} />
-                            ))}
+                        <div style={styles.listingActions}>
+                          <button type="button" style={styles.updateListingBtn} onClick={() => handleUpdate(listing._id)}>
+                            <FontAwesomeIcon icon={faEdit} /> Update
+                          </button>
+                          <button type="button" style={styles.deleteListingBtn} onClick={() => handleDelete(listing._id)}>
+                            <FontAwesomeIcon icon={faTrash} /> Delete
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Real-time Bookings Section with Special Requests */}
+            <div style={{ 
+              marginTop: '2rem', 
+              backgroundColor: 'white', 
+              borderRadius: '0.5rem', 
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)', 
+              padding: '1.5rem' 
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#1f2937' }}>
+                    Real-time Bookings
+                    <span style={{ fontSize: '0.75rem', marginLeft: '0.5rem', color: '#6b7280' }}>
+                      (Auto-updates every second)
+                    </span>
+                  </h3>
+                  {lastUpdate && (
+                    <p style={{ fontSize: '0.875rem', color: '#6b7280', margin: '0.25rem 0 0 0' }}>
+                      Last updated: {lastUpdate.toLocaleTimeString()}
+                    </p>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    backgroundColor: pollingInterval ? '#10b981' : '#ef4444',
+                    animation: pollingInterval ? 'pulse 1s infinite' : 'none'
+                  }} />
+                  <span style={{ fontSize: '0.875rem', color: pollingInterval ? '#059669' : '#6b7280' }}>
+                    {pollingInterval ? 'Live' : 'Offline'}
+                  </span>
+                </div>
+              </div>
+
+              {realTimeBookings.length === 0 ? (
+                <div style={{ 
+                  padding: '2rem', 
+                  textAlign: 'center', 
+                  color: '#6b7280',
+                  border: '2px dashed #e5e7eb',
+                  borderRadius: '0.5rem'
+                }}>
+                  <p style={{ marginBottom: '0.5rem' }}>No bookings yet</p>
+                  <p style={{ fontSize: '0.875rem' }}>New bookings will appear here in real-time</p>
+                </div>
+              ) : (
+                <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
+                  {realTimeBookings.slice(0, 10).map((booking, index) => {
+                    const isExpanded = expandedBookingId === (booking._id || booking.bookingId);
+                    const hasSpecialRequests = booking.specialRequests && booking.specialRequests.trim() !== '';
+                    const hasGuestDetails = booking.guestDetails && booking.guestDetails.length > 0;
+                    
+                    return (
+                      <div 
+                        key={booking._id || booking.bookingId} 
+                        style={{ 
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '0.5rem',
+                          marginBottom: '1rem',
+                          backgroundColor: index === 0 && isRecentBooking(booking) ? '#f0fdf4' : 'white',
+                          transition: 'all 0.3s'
+                        }}
+                      >
+                        <div 
+                          style={{ 
+                            padding: '1rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}
+                          onClick={() => toggleBookingDetails(booking._id || booking.bookingId)}
+                        >
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                              <FontAwesomeIcon icon={faUserFriends} style={{ color: '#d72d6e' }} />
+                              <strong style={{ fontSize: '1rem' }}>{booking.travelerName || 'Guest'}</strong>
+                              <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                                ({booking.travelerEmail})
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', flexWrap: 'wrap' }}>
+                              <div>
+                                <strong>Room:</strong> {booking.roomTitle || 'Room'}
+                              </div>
+                              <div>
+                                <strong>Dates:</strong> {formatDate(booking.checkIn)} → {formatDate(booking.checkOut)}
+                              </div>
+                              <div>
+                                <strong>Guests:</strong> {booking.guests || 1}
+                              </div>
+                              <div style={{ fontWeight: 600, color: '#d72d6e' }}>
+                                ₹{booking.totalCost?.toLocaleString() || '0'}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <span style={{
+                              padding: '0.25rem 0.75rem',
+                              borderRadius: '0.25rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              backgroundColor: getStatusColor(booking.bookingStatus).bg,
+                              color: getStatusColor(booking.bookingStatus).text
+                            }}>
+                              {booking.bookingStatus || 'pending'}
+                            </span>
+                            <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                              {formatBookingTime(booking.bookedAt)}
+                            </span>
+                            <FontAwesomeIcon 
+                              icon={faInfoCircle} 
+                              style={{ 
+                                color: '#6b7280',
+                                transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                transition: 'transform 0.3s'
+                              }} 
+                            />
                           </div>
                         </div>
-                      )}
 
-                      <div style={styles.listingActions}>
-                        <button type="button" style={styles.updateListingBtn} onClick={() => handleUpdate(listing._id)}>
-                          <FontAwesomeIcon icon={faEdit} /> Update
-                        </button>
-                        <button type="button" style={styles.deleteListingBtn} onClick={() => handleDelete(listing._id)}>
-                          <FontAwesomeIcon icon={faTrash} /> Delete
-                        </button>
+                        {/* Expanded Details */}
+                        {isExpanded && (
+                          <div style={{ 
+                            padding: '1rem', 
+                            borderTop: '1px solid #e5e7eb',
+                            backgroundColor: '#f9fafb',
+                            borderRadius: '0 0 0.5rem 0.5rem'
+                          }}>
+                            {/* Guest Details Section */}
+                            {hasGuestDetails && (
+                              <div style={{ marginBottom: '1.5rem' }}>
+                                <h4 style={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  <FontAwesomeIcon icon={faUserFriends} /> Guest Details
+                                </h4>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
+                                  {booking.guestDetails.map((guest, idx) => (
+                                    <div key={idx} style={{ 
+                                      backgroundColor: 'white', 
+                                      padding: '1rem', 
+                                      borderRadius: '0.375rem',
+                                      border: '1px solid #e5e7eb'
+                                    }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <strong style={{ color: '#d72d6e' }}>
+                                          Guest {idx + 1} {idx === 0 && '(Primary)'}
+                                        </strong>
+                                        <span style={{ 
+                                          fontSize: '0.75rem', 
+                                          padding: '0.125rem 0.375rem',
+                                          backgroundColor: '#e0e7ff',
+                                          color: '#3730a3',
+                                          borderRadius: '0.25rem'
+                                        }}>
+                                          {guest.guestGender || 'Not specified'}
+                                        </span>
+                                      </div>
+                                      
+                                      <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+                                        <div style={{ marginBottom: '0.25rem' }}>
+                                          <strong>Name:</strong> {guest.guestName || 'Not provided'}
+                                        </div>
+                                        {guest.guestAge && (
+                                          <div style={{ marginBottom: '0.25rem' }}>
+                                            <strong>Age:</strong> {guest.guestAge}
+                                          </div>
+                                        )}
+                                        {guest.guestContact && (
+                                          <div style={{ marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <FontAwesomeIcon icon={faEnvelope} size="xs" />
+                                            <strong>Contact:</strong> {guest.guestContact}
+                                          </div>
+                                        )}
+                                        {guest.govtIdType && guest.govtIdNumber && (
+                                          <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed #e5e7eb' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                              <FontAwesomeIcon icon={faIdCard} size="xs" />
+                                              <strong>ID:</strong> {getGovtIdTypeName(guest.govtIdType)}
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'monospace' }}>
+                                              {guest.govtIdNumber}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Special Requests Section */}
+                            {hasSpecialRequests && (
+                              <div style={{ marginBottom: '1.5rem' }}>
+                                <h4 style={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  <FontAwesomeIcon icon={faComment} /> Special Requests
+                                </h4>
+                                <div style={{ 
+                                  backgroundColor: 'white', 
+                                  padding: '1rem', 
+                                  borderRadius: '0.375rem',
+                                  border: '1px solid #e5e7eb',
+                                  fontStyle: 'italic',
+                                  color: '#374151',
+                                  fontSize: '0.875rem',
+                                  lineHeight: 1.6
+                                }}>
+                                  "{booking.specialRequests}"
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Payment & Booking Details */}
+                            <div style={{ 
+                              display: 'grid', 
+                              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                              gap: '1rem',
+                              marginTop: '1rem'
+                            }}>
+                              <div style={{ fontSize: '0.875rem' }}>
+                                <strong style={{ color: '#6b7280' }}>Transaction ID:</strong>
+                                <div style={{ color: '#374151', fontFamily: 'monospace' }}>
+                                  {booking.paymentDetails?.transactionId || 'N/A'}
+                                </div>
+                              </div>
+                              <div style={{ fontSize: '0.875rem' }}>
+                                <strong style={{ color: '#6b7280' }}>Payment Method:</strong>
+                                <div style={{ color: '#374151' }}>
+                                  {booking.paymentDetails?.paymentMethod || 'N/A'}
+                                </div>
+                              </div>
+                              <div style={{ fontSize: '0.875rem' }}>
+                                <strong style={{ color: '#6b7280' }}>Booking ID:</strong>
+                                <div style={{ color: '#374151' }}>
+                                  {booking.bookingId || booking._id || 'N/A'}
+                                </div>
+                              </div>
+                              <div style={{ fontSize: '0.875rem' }}>
+                                <strong style={{ color: '#6b7280' }}>Booked At:</strong>
+                                <div style={{ color: '#374151' }}>
+                                  {booking.bookedAt ? new Date(booking.bookedAt).toLocaleString() : 'N/A'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Contact Traveler Button */}
+                            {booking.travelerEmail && (
+                              <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+                                <button
+                                  onClick={() => navigate('/message', { 
+                                    state: { 
+                                      travelerEmail: booking.travelerEmail,
+                                      travelerName: booking.travelerName || 'Guest',
+                                      bookingId: booking.bookingId || booking._id
+                                    }
+                                  })}
+                                  style={{
+                                    padding: '0.5rem 1.5rem',
+                                    backgroundColor: '#d72d6e',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '0.375rem',
+                                    cursor: 'pointer',
+                                    fontSize: '0.875rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem'
+                                  }}
+                                >
+                                  <FontAwesomeIcon icon={faEnvelope} />
+                                  Contact Traveler
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
+                    );
+                  })}
+                  
+                  {realTimeBookings.length > 10 && (
+                    <div style={{ padding: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.875rem' }}>
+                      Showing 10 of {realTimeBookings.length} bookings
                     </div>
-                  );
-                })
+                  )}
+                </div>
               )}
             </div>
-          </div>
+          </>
         )}
 
         {/* Bookings Section */}
         {activeSection === 'bookings' && (
           <div style={{ marginTop: '2rem', backgroundColor: 'white', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)', padding: '1.5rem' }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#1f2937', marginBottom: '1.5rem' }}>Bookings Analytics</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#1f2937' }}>Bookings Analytics</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: pollingInterval ? '#10b981' : '#ef4444'
+                }} />
+                <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                  Auto-refreshing
+                </span>
+              </div>
+            </div>
             {analytics ? (
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
@@ -844,10 +1270,15 @@ const HostDashboard = () => {
                         padding: '0.75rem',
                         backgroundColor: '#f3f4f6',
                         color: '#374151',
-                        border: '1px solid #d1d5db',
+                        border: '1px dashed #d1d5db',
                         borderRadius: '0.375rem',
                         cursor: 'pointer',
-                        fontSize: '1rem'
+                        fontSize: '1rem',
+                        transition: 'all 0.2s',
+                        ':hover': {
+                          backgroundColor: '#e5e7eb',
+                          borderColor: '#9ca3af'
+                        }
                       }}
                     >
                       <FontAwesomeIcon icon={faImages} style={{ marginRight: '0.5rem' }} />
@@ -915,6 +1346,16 @@ const HostDashboard = () => {
           </div>
         )}
       </div>
+
+      {/* CSS for pulse animation */}
+      <style>
+        {`
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+          }
+        `}
+      </style>
     </div>
   );
 };
