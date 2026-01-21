@@ -95,7 +95,7 @@ const Navbar = ({ searchKeywords, onSearchChange }) => {
       </div>
 
       <div className="inbox">
-        <Link to="/messages" onClick={closeAllMenus}>
+        <Link to="/chat" onClick={closeAllMenus}>
           <i className="fa fa-envelope" id="i-inbox"></i>
         </Link>
       </div>
@@ -238,7 +238,7 @@ const Navbar = ({ searchKeywords, onSearchChange }) => {
           <button className="close-btn" onClick={toggleMobileMenu}>×</button>
           <ul>
             <li><Link to="/profile" onClick={closeAllMenus}>Profile</Link></li>
-            <li><Link to="/messages" onClick={closeAllMenus}>Inbox</Link></li>
+            <li><Link to="/chat" onClick={closeAllMenus}>Inbox</Link></li>
             <li><Link to="/history" onClick={closeAllMenus}>Viewed History</Link></li>
             <li><Link to="/BookedHistory" onClick={closeAllMenus}>Booked History</Link></li>
             <li><Link to="/wishlist" onClick={closeAllMenus}>Wishlist</Link></li>

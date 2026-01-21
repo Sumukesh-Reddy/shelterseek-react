@@ -1,34 +1,54 @@
-import React, { useState, useEffect } from 'react';
-import './messages.css';
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext'; // Adjust path as needed
+
 function Messages() {
-    const [messages, setMessages] = useState([]);
+    const navigate = useNavigate();
+    const { user, token } = useAuth();
 
     useEffect(() => {
-        const storedMessages = JSON.parse(localStorage.getItem("messages")) || [];
-        setMessages(storedMessages);
-    }, []);
+        // Check if user is logged in
+        if (!user || !token) {
+            navigate('/traveler-login', { 
+                state: { 
+                    redirectTo: '/chat',
+                    message: 'Please login to view your messages'
+                }
+            });
+            return;
+        }
 
-    const back = () => {
-        window.location.href = "/";
-    };
+        // Redirect to the real chat page
+        navigate('/chat');
+    }, [navigate, user, token]);
 
     return (
-        <div className="message-container">
-            <button id="homeBtn" onClick={back}>Back to Home</button>
-            <h1>My Messages</h1>
-            <div id="messages-list">
-                {messages.length === 0 ? (
-                    <p>No messages found.</p>
-                ) : (
-                    messages.map((message, index) => (
-                        <div key={index} className="message">
-                            <h3>To: {message.hostName}</h3>
-                            <p>{message.message}</p>
-                            <p className="timestamp">Sent on: {message.timestamp}</p>
-                        </div>
-                    ))
-                )}
+        <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100vh',
+            backgroundColor: '#36393f'
+        }}>
+            <div style={{
+                textAlign: 'center',
+                color: 'white'
+            }}>
+                <div style={{
+                    fontSize: '48px',
+                    marginBottom: '20px',
+                    animation: 'pulse 2s infinite'
+                }}>
+                    📨
+                </div>
+                <p>Loading your messages...</p>
             </div>
+            <style>{`
+                @keyframes pulse {
+                    0%, 100% { opacity: 0.5; transform: scale(1); }
+                    50% { opacity: 1; transform: scale(1.1); }
+                }
+            `}</style>
         </div>
     );
 }
