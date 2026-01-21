@@ -16,8 +16,13 @@ const mkdirp = require('mkdirp');
 const qrcode = require('qrcode');
 const hostController = require('./controllers/hostController');
 const adminController = require('./controllers/adminController');
-
+const http = require('http');
+const { Server } = require('socket.io');
 const { Traveler, Host } = require('./model/usermodel');
+const Message = require('./model/Message');
+const Room = require('./model/chatRoom');
+
+
 const RoomData = require('./model/Room');
 // At the top of app.js with other requires
 const { MongoClient } = require('mongodb');
@@ -152,6 +157,11 @@ app.use('/api', hostRoutes);
 
 const otpStore = {};
 const verifiedEmails = new Set();
+
+app.get('/message', (req, res) => {
+  
+  res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+});
 
 app.get('/test-email-config', async (req, res) => {
   try {
@@ -605,7 +615,8 @@ app.get('/api/rooms', async (req, res) => {
 
     const rooms = await RoomData.find(query).lean();
 
-    const processed = rooms.map(room => {
+    // Process rooms and optionally enrich with host info if email is missing
+    const processed = await Promise.all(rooms.map(async (room) => {
       const images = room.images?.map(img => {
         if (typeof img === 'object' && img.$oid) {
           return `/api/images/${img.$oid}`;
@@ -621,6 +632,24 @@ app.get('/api/rooms', async (req, res) => {
         }
         return date instanceof Date ? date.toISOString().split('T')[0] : date;
       }) || [];
+
+      // Try to get host email - from room data or by looking up Host collection
+      let hostEmail = room.email || '';
+      let hostGender = room.hostGender || '';
+      let hostImage = room.hostImage || null;
+      
+      // If email is missing but we have room name, try to find host by name
+      if (!hostEmail && room.name) {
+        try {
+          const hostByName = await Host.findOne({ name: room.name }).select('email profilePhoto').lean();
+          if (hostByName) {
+            hostEmail = hostEmail || hostByName.email || '';
+            hostImage = hostImage || hostByName.profilePhoto || null;
+          }
+        } catch (err) {
+          // Silently fail - not critical
+        }
+      }
 
       return {
         _id: room._id?.toString(),
@@ -652,9 +681,14 @@ app.get('/api/rooms', async (req, res) => {
         isBookedByMe: userId ? room.bookedBy?.toString() === userId : false,
         status: room.status || 'pending',
         createdAt: room.createdAt,
-        updatedAt: room.updatedAt
+        updatedAt: room.updatedAt,
+        // Include host-related fields for chat functionality
+        email: hostEmail,
+        hostGender: hostGender,
+        hostImage: hostImage,
+        yearsWithUs: room.yearsWithUs || 0
       };
-    });
+    }));
 
     res.json({
       status: 'success',
@@ -2062,7 +2096,11 @@ async function generateGreetingResponse(query) {
     "good afternoon": "Good afternoon! 🌤️ How can I help you find accommodation today?",
     "good evening": "Good evening! 🌙 Looking for a place to stay tonight?",
     "how are you": "I'm great, thanks! Ready to help you find amazing accommodations. What's on your mind?",
-    "what can you do": `I can help you search through ${roomCount} properties! I can find hotels by location, price, type, and amenities. Try asking me something like:\n• "Hotels in Goa"\n• "Budget stays under 2000"\n• "Beach resorts"\n• "Family rooms with pool"`,
+    "what can you do": `I can help you search through ${roomCount} properties! I can find hotels by location, price, type, and amenities. Try asking me something like:
+• "Hotels in Goa"
+• "Budget stays under 2000"
+• "Beach resorts"
+• "Family rooms with pool"`,
     "who are you": "I'm ShelterSeek AI, your personal hotel booking assistant! I search through our database to find the perfect accommodations for you.",
     "what are you": "I'm an AI-powered booking assistant for ShelterSeek. I help travelers find and book hotels, resorts, and homestays across India.",
     "help": `I can help you find hotels, resorts, homestays, and more! Just tell me what you're looking for. Examples:\n• "Hotels in Hyderabad"\n• "Budget stays under ₹1500"\n• "Resorts"\n• "Family rooms with pool"\n• "Luxury hotels"\n• "Properties near airport"`,
@@ -2566,10 +2604,631 @@ app.post('/api/ai-chat', async (req, res) => {
     });
   }
 });
+// errors are logged above
 
-// ======================================================
 // ===============   INITIALIZATION   ===================
-// ======================================================
+// ===============   Sai Part ended   ===================
+
+// ========== CHAT ROUTES ==========
+
+// Get or Create Direct Chat Room
+app.post('/api/chat/room', authenticateToken, async (req, res) => {
+  try {
+    const { participantId } = req.body;
+
+    if (!participantId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Participant ID is required' 
+      });
+    }
+
+    // Determine current user's model
+    const currentUserModel = req.user.accountType === 'traveller' ? 'Traveler' : 'Host';
+    
+    // Find participant and determine their model
+    let participant = await Traveler.findById(participantId);
+    let participantModel = 'Traveler';
+    
+    if (!participant) {
+      participant = await Host.findById(participantId);
+      participantModel = 'Host';
+    }
+    
+    if (!participant) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Participant not found' 
+      });
+    }
+
+    // Find or create room
+    let room = await Room.findOne({
+      isGroup: false,
+      participants: { 
+        $all: [req.user._id, participantId],
+        $size: 2 
+      }
+    });
+
+    if (!room) {
+      room = await Room.create({
+        participants: [req.user._id, participantId],
+        participantModels: [currentUserModel, participantModel],
+        isGroup: false
+      });
+    }
+
+    // Fetch room with populated participants
+    room = await Room.findById(room._id);
+    
+    // Manually add participant details since we can't populate with different models
+    const participants = [];
+    
+    // Get current user details
+    const currentUser = currentUserModel === 'Traveler' 
+      ? await Traveler.findById(req.user._id).select('name email profilePhoto online lastSeen')
+      : await Host.findById(req.user._id).select('name email profilePhoto online lastSeen');
+    
+    // Get other participant details
+    const otherParticipant = participantModel === 'Traveler'
+      ? await Traveler.findById(participantId).select('name email profilePhoto online lastSeen')
+      : await Host.findById(participantId).select('name email profilePhoto online lastSeen');
+    
+    participants.push({
+      _id: req.user._id,
+      name: currentUser?.name || 'Unknown',
+      email: currentUser?.email || '',
+      profilePhoto: currentUser?.profilePhoto || null,
+      online: currentUser?.online || false,
+      lastSeen: currentUser?.lastSeen || new Date()
+    });
+    
+    participants.push({
+      _id: participantId,
+      name: otherParticipant?.name || 'Unknown',
+      email: otherParticipant?.email || '',
+      profilePhoto: otherParticipant?.profilePhoto || null,
+      online: otherParticipant?.online || false,
+      lastSeen: otherParticipant?.lastSeen || new Date()
+    });
+
+    const roomWithDetails = {
+      ...room.toObject(),
+      participants
+    };
+
+    res.json({
+      success: true,
+      room: roomWithDetails
+    });
+  } catch (error) {
+    console.error('Create room error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to create chat room' 
+    });
+  }
+});
+
+// Get User's Chat Rooms
+// In app.js, update the /api/chat/rooms endpoint
+app.get('/api/chat/rooms', authenticateToken, async (req, res) => {
+  try {
+    const rooms = await Room.find({
+      participants: req.user._id
+    })
+    .populate('lastMessage')
+    .sort({ updatedAt: -1 });
+
+    // Manually populate participants for each room
+    const roomsWithParticipants = await Promise.all(rooms.map(async (room) => {
+      const participants = [];
+      
+      for (let i = 0; i < room.participants.length; i++) {
+        const participantId = room.participants[i];
+        const modelType = room.participantModels?.[i] || 'Traveler';
+        
+        let participant;
+        if (modelType === 'Traveler') {
+          participant = await Traveler.findById(participantId)
+            .select('name email profilePhoto online lastSeen');
+        } else {
+          participant = await Host.findById(participantId)
+            .select('name email profilePhoto online lastSeen');
+        }
+        
+        if (participant) {
+          participants.push({
+            _id: participantId,
+            name: participant.name || 'Unknown',
+            email: participant.email || '',
+            profilePhoto: participant.profilePhoto || null,
+            online: participant.online || false,
+            lastSeen: participant.lastSeen || new Date()
+          });
+        }
+      }
+      
+      // Calculate unread count
+      const unreadCount = await Message.countDocuments({
+        roomId: room._id,
+        sender: { $ne: req.user._id },
+        read: false
+      });
+      
+      return {
+        ...room.toObject(),
+        participants,
+        unreadCount
+      };
+    }));
+
+    res.json({
+      success: true,
+      rooms: roomsWithParticipants
+    });
+  } catch (error) {
+    console.error('Get rooms error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch chat rooms' 
+    });
+  }
+});
+
+// Delete a Chat Room
+app.delete('/api/chat/room/:roomId', authenticateToken, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+
+    const room = await Room.findById(roomId);
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Room not found' });
+    }
+
+    const isParticipant = room.participants.some(p => p.toString() === req.user._id.toString());
+    if (!isParticipant) {
+      return res.status(403).json({ success: false, message: 'Not authorized to delete this room' });
+    }
+
+    await Message.deleteMany({ roomId });
+    await Room.findByIdAndDelete(roomId);
+
+    res.json({ success: true, message: 'Chat deleted' });
+  } catch (error) {
+    console.error('Delete room error:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete chat' });
+  }
+});
+
+// Get Messages for a Room
+app.get('/api/chat/messages/:roomId', authenticateToken, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { page = 1, limit = 50 } = req.query;
+
+    const room = await Room.findOne({
+      _id: roomId,
+      participants: req.user._id
+    });
+
+    if (!room) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied' 
+      });
+    }
+
+    const messages = await Message.find({
+      roomId,
+      deleted: false
+    })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .sort({ createdAt: 1 });
+
+    // Manually populate sender details
+    const messagesWithSenders = await Promise.all(messages.map(async (msg) => {
+      let sender;
+      if (msg.senderModel === 'Traveler') {
+        sender = await Traveler.findById(msg.sender).select('name profilePhoto');
+      } else {
+        sender = await Host.findById(msg.sender).select('name profilePhoto');
+      }
+      
+      return {
+        ...msg.toObject(),
+        sender: {
+          _id: msg.sender,
+          name: sender?.name || 'Unknown',
+          profilePhoto: sender?.profilePhoto || null
+        }
+      };
+    }));
+
+    // Mark messages as read
+    await Message.updateMany(
+      {
+        roomId,
+        sender: { $ne: req.user._id },
+        read: false
+      },
+      {
+        read: true,
+        readAt: new Date()
+      }
+    );
+
+    res.json({
+      success: true,
+      messages: messagesWithSenders,
+      page,
+      total: await Message.countDocuments({ roomId, deleted: false })
+    });
+  } catch (error) {
+    console.error('Get messages error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch messages' 
+    });
+  }
+});
+
+// In app.js, update the search endpoint
+app.get('/api/users/search', authenticateToken, async (req, res) => {
+  try {
+    const { query } = req.query;
+
+    if (!query || query.trim().length < 2) {
+      return res.json({ success: true, users: [] });
+    }
+
+    const searchTerm = query.trim().toLowerCase();
+    
+    const isEmailSearch = searchTerm.includes('@');
+    
+    const emailRegex = isEmailSearch 
+      ? { $regex: `^${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' }
+      : { $regex: searchTerm, $options: 'i' };
+    
+    const [travelers, hosts] = await Promise.all([
+      Traveler.find({
+        _id: { $ne: req.user._id },
+        $or: [
+          { name: { $regex: searchTerm, $options: 'i' } },
+          { email: emailRegex }
+        ]
+      })
+      .select('name email profilePhoto online lastSeen accountType')
+      .limit(10)
+      .lean(),
+
+      Host.find({
+        _id: { $ne: req.user._id },
+        $or: [
+          { name: { $regex: searchTerm, $options: 'i' } },
+          { email: emailRegex }
+        ]
+      })
+      .select('name email profilePhoto online lastSeen accountType')
+      .limit(10)
+      .lean()
+    ]);
+
+    console.log(`[Search] Query: "${searchTerm}", Found ${travelers.length} travelers, ${hosts.length} hosts`);
+
+    // FIX: Create a Set to track seen IDs and emails
+    const seenIds = new Set();
+    const seenEmails = new Set();
+    
+    // Combine and format results
+    const users = [...travelers, ...hosts]
+      .map(user => ({
+        _id: user._id.toString(),
+        name: user.name || 'Unknown User',
+        email: user.email || '',
+        profilePhoto: user.profilePhoto || null,
+        online: user.online || false,
+        lastSeen: user.lastSeen || new Date(),
+        accountType: user.accountType
+      }))
+      // Filter duplicates: check both ID AND email
+      .filter(user => {
+        // Skip current user
+        if (user._id === req.user._id.toString()) return false;
+        
+        // Skip if we've seen this ID before
+        if (seenIds.has(user._id)) return false;
+        
+        // Also skip if we've seen this email before (for extra safety)
+        const email = user.email.toLowerCase();
+        if (email && seenEmails.has(email)) return false;
+        
+        // Add to seen sets
+        seenIds.add(user._id);
+        if (email) seenEmails.add(email);
+        
+        return true;
+      })
+      // If searching by email, prioritize exact matches
+      .sort((a, b) => {
+        if (isEmailSearch) {
+          const aMatch = (a.email || '').toLowerCase() === searchTerm;
+          const bMatch = (b.email || '').toLowerCase() === searchTerm;
+          if (aMatch && !bMatch) return -1;
+          if (!aMatch && bMatch) return 1;
+        }
+        return 0;
+      })
+      .slice(0, 20);
+
+    res.json({
+      success: true,
+      users,
+      count: users.length
+    });
+  } catch (error) {
+    console.error('Search users error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to search users' 
+    });
+  }
+});
+
+// In app.js, add a test endpoint
+app.post('/api/test-message', authenticateToken, async (req, res) => {
+  try {
+    const { content, roomId } = req.body;
+    
+    const message = await Message.create({
+      sender: req.user._id,
+      senderModel: req.user.accountType === 'traveller' ? 'Traveler' : 'Host',
+      content,
+      type: 'text',
+      roomId
+    });
+    
+    console.log('Test message saved:', message);
+    res.json({ success: true, message });
+  } catch (error) {
+    console.error('Test message error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ========== WEBSOCKET SETUP ==========
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000',
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth.token || 
+                  socket.handshake.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      console.log('No token provided for socket connection');
+      return next(new Error('Authentication error: No token'));
+    }
+
+    // Verify JWT token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'myjwtsecret');
+    
+    // Find user in either Traveler or Host collections
+    let user = await Traveler.findById(decoded.id);
+    if (!user) {
+      user = await Host.findById(decoded.id);
+    }
+    
+    if (!user) {
+      console.log('User not found for socket connection:', decoded.id);
+      return next(new Error('User not found'));
+    }
+
+    // Attach user info to socket
+    socket.userId = user._id;
+    socket.user = {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      accountType: user.accountType,
+      profilePhoto: user.profilePhoto
+    };
+    
+    console.log('Socket authenticated for user:', user.email);
+    next();
+  } catch (error) {
+    console.error('Socket authentication error:', error.message);
+    next(new Error('Authentication error'));
+  }
+});
+
+const onlineUsers = new Map();
+
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.userId);
+  
+  onlineUsers.set(socket.userId.toString(), socket.id);
+  
+  // Update online status for both Traveler and Host models
+  Traveler.findByIdAndUpdate(socket.userId, {
+    online: true,
+    lastSeen: new Date()
+  }).exec().catch(() => {
+    // If not found in Traveler, try Host
+    Host.findByIdAndUpdate(socket.userId, {
+      online: true,
+      lastSeen: new Date()
+    }).exec().catch(err => console.error('Error updating online status:', err));
+  });
+
+  socket.broadcast.emit('user-online', { userId: socket.userId });
+
+  socket.join(`user:${socket.userId}`);
+
+  socket.on('join-room', (roomId) => {
+    if (!roomId) return;
+    socket.join(roomId);
+    console.log(`User ${socket.userId} joined room: ${roomId}`);
+  });
+
+  socket.on('leave-room', (roomId) => {
+    if (!roomId) return;
+    socket.leave(roomId);
+    console.log(`User ${socket.userId} left room: ${roomId}`);
+  });
+
+  socket.on('send-message', async (data) => {
+    try {
+      console.log('[WebSocket] Send message received:', data);
+      console.log('[WebSocket] User ID:', socket.userId);
+      
+      const { roomId, content, type = 'text', mediaUrl } = data || {};
+
+      if (!roomId || !content || !content.trim()) {
+        console.warn('[WebSocket] Invalid send-message payload');
+        return socket.emit('message-error', { error: 'Room ID and message content are required' });
+      }
+      
+      // Make sure room exists and user is a participant
+      const room = await Room.findById(roomId);
+      if (!room) {
+        console.warn('[WebSocket] Room not found for message:', roomId);
+        return socket.emit('message-error', { error: 'Chat room not found' });
+      }
+
+      const isParticipant = room.participants.some(
+        (p) => p.toString() === socket.userId.toString()
+      );
+      if (!isParticipant) {
+        console.warn('[WebSocket] User not in room:', { userId: socket.userId, roomId });
+        return socket.emit('message-error', { error: 'You are not a participant in this room' });
+      }
+      
+      // Determine sender model
+      let senderModel = 'Traveler';
+      let sender = await Traveler.findById(socket.userId);
+      if (!sender) {
+        sender = await Host.findById(socket.userId);
+        senderModel = 'Host';
+      }
+  
+      console.log('[WebSocket] Sender found:', sender?.email, 'Model:', senderModel);
+      
+      // Create message in MongoDB
+      console.log('[WebSocket] Creating message in database...');
+      const message = await Message.create({
+        sender: socket.userId,
+        senderModel,
+        content: content.trim(),
+        type,
+        mediaUrl,
+        roomId
+      });
+      
+      console.log('[WebSocket] Message created successfully:', message._id);
+
+      // Update room's lastMessage and updatedAt
+      room.lastMessage = message._id;
+      room.updatedAt = new Date();
+      await room.save();
+
+      // Prepare payload with populated sender (shape expected by frontend)
+      const populatedSender = {
+        _id: socket.userId,
+        name: sender?.name || 'Unknown',
+        profilePhoto: sender?.profilePhoto || null
+      };
+
+      const outMessage = {
+        ...message.toObject(),
+        sender: populatedSender
+      };
+
+      // Emit to all sockets in the room (users who joined the room)
+      io.to(roomId).emit('receive-message', outMessage);
+
+      // Additionally notify each participant via their personal channel.
+      // IMPORTANT: exclude sender to avoid duplicate deliveries (sender is already in the room).
+      room.participants.forEach((participantId) => {
+        const pid = participantId.toString();
+        if (pid === socket.userId.toString()) return;
+        io.to(`user:${pid}`).emit('receive-message', outMessage);
+      });
+
+      // Acknowledge back to sender (in case they are not listening to room events)
+      socket.emit('message-sent', outMessage);
+      
+    } catch (error) {
+      console.error('[WebSocket] Send message error:', error);
+      console.error('[WebSocket] Error details:', error.message);
+      socket.emit('message-error', { error: 'Failed to send message' });
+    }
+  });
+
+  socket.on('typing', (data) => {
+    const { roomId, isTyping } = data;
+    socket.to(roomId).emit('user-typing', {
+      userId: socket.userId,
+      userName: socket.user.name,
+      isTyping
+    });
+  });
+
+  socket.on('mark-read', async (data) => {
+    try {
+      const { messageId } = data;
+      
+      await Message.findByIdAndUpdate(messageId, {
+        read: true,
+        readAt: new Date()
+      });
+
+      const message = await Message.findById(messageId);
+      io.to(message.roomId).emit('message-read', {
+        messageId,
+        userId: socket.userId,
+        readAt: new Date()
+      });
+    } catch (error) {
+      console.error('Mark read error:', error);
+    }
+  });
+
+  
+  socket.on('disconnect', async () => {
+    console.log('User disconnected:', socket.userId);
+    
+    onlineUsers.delete(socket.userId?.toString());
+    
+    if (socket.userId) {
+      // Update both Traveler and Host models
+      try {
+        await Traveler.findByIdAndUpdate(socket.userId, {
+          online: false,
+          lastSeen: new Date()
+        });
+        
+        await Host.findByIdAndUpdate(socket.userId, {
+          online: false,
+          lastSeen: new Date()
+        });
+      } catch (err) {
+        console.error('Error updating online status:', err);
+      }
+      
+      socket.broadcast.emit('user-offline', { userId: socket.userId });
+    }
+  });
+  
+});
 
 // Load initial inventory
 setTimeout(async () => {
@@ -2591,7 +3250,8 @@ setTimeout(async () => {
 console.log("[AI] Chat system initialized using /api/rooms endpoint");
 app.delete('/api/users/:id', adminController.deleteUser);
 
-app.listen(PORT, () => {
+// IMPORTANT: Socket.IO is attached to `server`, so we must listen on `server` (not `app`)
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`Email: ${process.env.EMAIL_USER || process.env.EMAIL || 'Not set'}`);

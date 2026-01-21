@@ -56,7 +56,9 @@ const baseUserFields = {
   createdAt: {
     type: Date,
     default: Date.now
-  }
+  },
+  online: { type: Boolean, default: false },
+  lastSeen: { type: Date, default: Date.now },
 };
 
 // usermodel.js - UPDATED booking schema

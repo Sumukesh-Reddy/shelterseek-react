@@ -34,22 +34,25 @@ import HostDetails from './pages/AdminNotifications/HostDetails';
 import AdminTrends from './pages/AdminTrends/AdminTrends';
 import TravelerDetails from './pages/AdminNotifications/TravelerDetails';
 import HotelChatbot  from './pages/HotelChatBot/HotelChatbot';
-import ChatbotIcon from './components/ChatbotIcon/ChatbotIcon';
+// import ChatbotIcon from './components/ChatbotIcon/ChatbotIcon';
 import HostRequests from "./pages/HostRequests/HostRequests";
+import { AuthProvider } from './contexts/AuthContext';
+import { SocketProvider } from './contexts/SocketContext';
+import ChatPage from './pages/ChatPage/ChatPage';
 
 function App() {
   return (
     <Provider store={store}>
       <Router>
-        <ChatbotIcon />
+        {/* <ChatbotIcon /> */}
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/about" element={<About />} />
           <Route path="/room/:id" element={<RoomLayout />} />
           <Route path="/wishlist" element={<Wishlist />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
-          <Route path="/messages" element={<Messages />} />
           <Route path="/message" element={<Message />} />
+          <Route path="/messages" element={<Messages />} />
           <Route path="/loginweb" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/reset-password" element={<ResetPassword />} />
@@ -74,6 +77,7 @@ function App() {
           <Route path="/traveler/:email/bookings" element={<TravelerDetails />} />
           <Route path="/chatbot" element={<HotelChatbot />} />
           <Route path="/admin/hostrequests" element={<HostRequests />} />
+          <Route path="/chat" element={<AuthProvider><SocketProvider><ChatPage /></SocketProvider></AuthProvider>} />
         </Routes>
       </Router>
     </Provider>

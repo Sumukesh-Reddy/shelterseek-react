@@ -489,25 +489,59 @@ const RoomLayout = () => {
     );
   };
 
-  const handleMessage = () => {
-    try {
-      if (!room) {
-        showErrorMessage("Room data not loaded yet");
-        return;
-      }
-      navigate('/message', { 
-        state: { 
-          hostId: room.id,
-          hostName: room.host.name,
-          hostEmail: room.host.email
-        }
-      });
-    } catch (error) {
-      console.error('Navigation error:', error);
-      setError('Failed to open messages. Please try again.');
-    }
-  };
 
+  const handleMessage = () => {
+  
+  if (!room) {
+    showErrorMessage("Room information not loaded yet. Please wait...");
+    return;
+  }
+
+  // Get host email from multiple possible locations
+  // Try: room.host.email (from processRoomData), room.email (direct from API), or any nested location
+  const hostEmail = (
+    room?.host?.email || 
+    room?.email || 
+    room?.hostEmail ||
+    ''
+  ).trim();
+  
+  if (!hostEmail) {
+    console.error('Host email missing in room data. Full room object:', room);
+    console.error('Available fields:', {
+      roomId: room?.id,
+      roomEmail: room?.email,
+      hostObject: room?.host,
+      hostEmail: room?.host?.email,
+      allKeys: room ? Object.keys(room) : []
+    });
+    showErrorMessage("Host email not available for this room. The host may need to update their profile.");
+    return;
+  }
+
+  const token = localStorage.getItem('token');
+  const userStr = localStorage.getItem('user');
+
+  if (!token || !userStr) {
+    navigate('/traveler-login', {
+      state: {
+        redirectTo: window.location.pathname,
+        message: 'Please login to message the host'
+      }
+    });
+    return;
+  }
+  
+  navigate('/chat', {
+    state: {
+      startChatWith: {
+        email: hostEmail,
+        name: room.host?.name || 'Host',
+        profilePhoto: room.host?.image || null
+      }
+    }
+  });
+};
   const getRentButtonText = () => {
     if (!checkInDate || !checkOutDate) return "Select Dates";
     
@@ -830,10 +864,6 @@ const RoomLayout = () => {
                   </div>
                   <div className="room-price-period">per night</div>
                 </div>
-                <div className="room-rating">
-                  {generateStars(calculateAverageRating(room.review_main))}
-                  <span>{calculateAverageRating(room.review_main)}/5</span>
-                </div>
               </div>
 
               {/* Calendar */}
@@ -934,47 +964,6 @@ const RoomLayout = () => {
             )}
           </div>
 
-          {/* Reviews Section */}
-          <div className="room-reviews-section">
-            <h2>
-              <FontAwesomeIcon icon={faStar} />
-              Reviews from our Users
-            </h2>
-            {room.review_main && room.review_main.length ? (
-              <div className="room-review-grid">
-                {room.review_main.map((review, index) => (
-                  <div key={index} className="room-review-card">
-                    <div className="room-review-header">
-                      <img 
-                        src={review.image || '/images/default-user.jpg'} 
-                        alt="User"
-                        className="room-review-avatar"
-                        onError={(e) => {
-                          e.target.src = '/images/default-user.jpg';
-                        }}
-                      />
-                      <div className="room-review-info">
-                        <h4 className="room-reviewer-name">
-                          {review.name || 'Anonymous'}
-                        </h4>
-                        <div className="room-review-date">
-                          {review.date ? new Date(review.date).toLocaleDateString() : 'Recently'}
-                        </div>
-                      </div>
-                      <div className="room-review-rating">
-                        {generateStars(review.rating)}
-                      </div>
-                    </div>
-                    <p className="room-review-text">
-                      {review.review || 'No review text provided'}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="room-no-reviews">No reviews yet. Be the first to review this property!</p>
-            )}
-          </div>
         </div>
       </div>
       

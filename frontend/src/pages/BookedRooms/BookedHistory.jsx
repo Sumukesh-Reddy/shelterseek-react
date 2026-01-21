@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../../components/Navbar/Navbar';
 import Footer from '../../components/Footer/Footer';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faEnvelope } from '@fortawesome/free-solid-svg-icons';
 import './BookedHistory.css';
 
 const BookedHistory = () => {
@@ -71,6 +73,38 @@ const BookedHistory = () => {
       case 'completed': return 'status-completed';
       default: return 'status-pending';
     }
+  };
+
+  const handleMessage = (booking) => {
+    const hostEmail = booking.hostEmail?.trim();
+    
+    if (!hostEmail) {
+      alert("Host email not available for this booking.");
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+
+    if (!token || !userStr) {
+      navigate('/traveler-login', {
+        state: {
+          redirectTo: window.location.pathname,
+          message: 'Please login to message the host'
+        }
+      });
+      return;
+    }
+    
+    navigate('/chat', {
+      state: {
+        startChatWith: {
+          email: hostEmail,
+          name: booking.hostName || 'Host',
+          profilePhoto: booking.hostImage || null
+        }
+      }
+    });
   };
 
   if (loading) {
@@ -230,19 +264,11 @@ const BookedHistory = () => {
 
                 {/* ACTION BUTTONS */}
                 <div className="booking-actions">
-                  
-                  <button
-                    className="action-button contact-host"
-                    onClick={() =>
-                      navigate('/message', {
-                        state: {
-                          hostEmail: booking.hostEmail,
-                          hostName: booking.hostEmail.split('@')[0]
-                        }
-                      })
-                    }
+                  <button 
+                    className="message-host-button"
+                    onClick={() => handleMessage(booking)}
                   >
-                    Contact Host
+                    <FontAwesomeIcon icon={faEnvelope} /> Message Host
                   </button>
                 </div>
 
