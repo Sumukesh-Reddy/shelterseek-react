@@ -321,7 +321,7 @@ const ChatPage = () => {
       ) : !isMobile && (
         <div className="chat-welcome-screen">
           <div className="welcome-content">
-            <h2 className="welcome-title">Welcome to Chat</h2>
+            <h2 className="welcome-title">Welcome to ShelterSeek</h2>
             <p className="welcome-message">
               Select a chat or start a new conversation
             </p>
