@@ -1233,7 +1233,7 @@ app.get('/api/recent-activities', async (req, res) => {
       allActivities.push({
         type: 'booking',
         id: booking._id,
-        name: booking.userName || 'Guest',
+        name: booking.travelerName || 'Guest',
         action: `Room Booked "${roomTitle}" with ${bookingId}`,
         email: booking.userEmail,
         date: date,
@@ -1517,7 +1517,7 @@ app.get('/api/bookings/summarys', async (req, res) => {
 
       return {
         _id: b._id,
-        bookingId: b.bookingId || b._id,
+        transactionId: b.paymentDetails.transactionId || b._id,
         userName: b.travelerName || 'Unknown',
         userEmail: b.travelerEmail || '',
         roomTitle: b.roomTitle || 'N/A',
@@ -1525,6 +1525,8 @@ app.get('/api/bookings/summarys', async (req, res) => {
         checkOut: b.checkOut || null,
         totalCost: cost,
         amount: cost,
+        // Add cardType here
+        cardType: b.paymentDetails.cardType || 'Not specified',
       };
     });
 
