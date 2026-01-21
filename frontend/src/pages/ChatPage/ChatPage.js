@@ -1,4 +1,5 @@
-// pages/ChatPage.js - Fixed version
+// Replace your current ChatPage.js with this updated version:
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext';
@@ -19,10 +20,16 @@ const ChatPage = () => {
   const [loading, setLoading] = useState(true);
   const [showUserList, setShowUserList] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [typingUsers, setTypingUsers] = useState({});
   const processedStartChatRef = useRef(false);
+  const messagesEndRef = useRef(null);
+  const pollingIntervalRef = useRef(null);
+  const lastMessageFetchRef = useRef({});
+
+  const API_URL = 'http://localhost:3001';
 
   const api = axios.create({
-    baseURL: 'http://localhost:3001/api',
+    baseURL: `${API_URL}/api`,
     headers: {
       'Authorization': `Bearer ${localStorage.getItem('token')}`
     }
@@ -41,11 +48,14 @@ const ChatPage = () => {
   const fetchChatRooms = useCallback(async () => {
     try {
       const response = await api.get('/chat/rooms');
-      setRooms(response.data.rooms);
+      const sortedRooms = response.data.rooms.sort((a, b) => 
+        new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)
+      );
+      setRooms(sortedRooms);
       
-      if (!isMobile && response.data.rooms.length > 0 && !selectedRoom) {
-        setSelectedRoom(response.data.rooms[0]);
-        fetchMessages(response.data.rooms[0]._id);
+      if (!isMobile && sortedRooms.length > 0 && !selectedRoom) {
+        setSelectedRoom(sortedRooms[0]);
+        fetchMessages(sortedRooms[0]._id);
       }    
     } catch (error) {
       console.error('Failed to load chat rooms:', error);
@@ -60,6 +70,74 @@ const ChatPage = () => {
   useEffect(() => {
     fetchChatRooms();
   }, [fetchChatRooms]);
+
+  // Polling for new messages
+  const startPolling = useCallback(() => {
+    // Clear existing interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+    
+    // Only start polling if we have a selected room
+    if (!selectedRoom?._id) return;
+    
+    console.log('Starting polling for room:', selectedRoom._id);
+    
+    // Poll every 3 seconds for new messages
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        const response = await api.get(`/chat/messages/${selectedRoom._id}`);
+        const newMessages = response.data.messages || [];
+        
+        // Check if messages have actually changed
+        const lastFetch = lastMessageFetchRef.current[selectedRoom._id];
+        const currentLastMessage = newMessages[newMessages.length - 1];
+        
+        if (!lastFetch || 
+            !lastFetch._id || 
+            lastFetch._id !== currentLastMessage?._id ||
+            lastFetch.content !== currentLastMessage?.content) {
+          
+          console.log('Polling detected new messages:', currentLastMessage?._id);
+          setMessages(newMessages);
+          
+          // Update last fetch reference
+          if (currentLastMessage) {
+            lastMessageFetchRef.current[selectedRoom._id] = {
+              _id: currentLastMessage._id,
+              content: currentLastMessage.content,
+              timestamp: Date.now()
+            };
+          }
+        }
+        
+        // Also refresh rooms list periodically (every 30 seconds)
+        if (Date.now() - (lastMessageFetchRef.current.lastRoomFetch || 0) > 30000) {
+          fetchChatRooms();
+          lastMessageFetchRef.current.lastRoomFetch = Date.now();
+        }
+        
+      } catch (error) {
+        console.error('Polling error:', error);
+        // Don't stop polling on occasional errors
+      }
+    }, 3000); // Poll every 3 seconds
+  }, [selectedRoom?._id, fetchChatRooms]);
+
+  // Start/stop polling based on selected room
+  useEffect(() => {
+    if (selectedRoom?._id) {
+      startPolling();
+    }
+    
+    return () => {
+      if (pollingIntervalRef.current) {
+        console.log('Clearing polling interval');
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [selectedRoom?._id, startPolling]);
 
   // Handle starting/opening a chat from navigation state
   useEffect(() => {
@@ -80,7 +158,7 @@ const ChatPage = () => {
           return;
         }
 
-        const resp = await axios.get('http://localhost:3001/api/users/search', {
+        const resp = await axios.get(`${API_URL}/api/users/search`, {
           params: { query: email },
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -135,54 +213,199 @@ const ChatPage = () => {
     openChatByEmail();
   }, [location.state, rooms, loading]);
 
+  // Socket event handlers
   useEffect(() => {
-    return () => {
-      if (socket && selectedRoom) {
-        socket.emit('leave-room', selectedRoom._id);
-      }
-    };
-  }, [socket, selectedRoom]);
+    if (!socket || !user?._id) return;
 
-  useEffect(() => {
-    if (!socket) return;
+    console.log('Setting up socket listeners for user:', user._id);
+
+    // Join user's personal room
+    socket.emit('join-user', user._id);
 
     const handleIncomingMessage = (message) => {
-      
-      if (message.sender?._id === user?._id) {
-        console.log('Ignoring message from self via socket');
-        return;
+      console.log('Received message via socket:', {
+        messageId: message._id,
+        roomId: message.roomId,
+        senderId: message.sender?._id,
+        currentUserId: user?._id,
+        content: message.content
+      });
+
+      // Update last fetch reference to prevent polling from overwriting
+      if (selectedRoom && selectedRoom._id === message.roomId) {
+        lastMessageFetchRef.current[message.roomId] = {
+          _id: message._id,
+          content: message.content,
+          timestamp: Date.now()
+        };
       }
-      
-      setRooms(prevRooms => prevRooms.map(room => 
-        room._id === message.roomId 
-          ? { ...room, lastMessage: message, updatedAt: new Date() }
-          : room
-      ));
-    
+
+      // Update rooms list with new last message
+      setRooms(prevRooms => {
+        const updatedRooms = prevRooms.map(room => {
+          if (room._id === message.roomId) {
+            console.log('Updating room last message via socket:', room._id);
+            return {
+              ...room,
+              lastMessage: message,
+              updatedAt: new Date().toISOString(),
+              unreadCount: selectedRoom?._id === room._id ? 0 : (room.unreadCount || 0) + 1
+            };
+          }
+          return room;
+        });
+
+        // If room doesn't exist, sort to bring it to top
+        const roomExists = prevRooms.some(r => r._id === message.roomId);
+        if (!roomExists) {
+          fetchChatRooms(); // Refresh rooms list
+          return prevRooms;
+        }
+
+        // Sort by updatedAt
+        return updatedRooms.sort((a, b) => 
+          new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)
+        );
+      });
+
+      // If this message is for the currently selected room, add it to messages
       if (selectedRoom && message.roomId === selectedRoom._id) {
+        console.log('Adding message to current chat window via socket:', message.content);
         setMessages(prev => {
-          
-          const isDuplicate = prev.some(msg => 
+          // Check if message already exists
+          const messageExists = prev.some(msg => 
             msg._id === message._id || 
-            (msg.content === message.content && msg.sender?._id === message.sender?._id)
+            (msg.isOptimistic && 
+             msg.content === message.content && 
+             msg.sender?._id === message.sender?._id &&
+             Math.abs(new Date(msg.createdAt) - new Date(message.createdAt)) < 5000) // Within 5 seconds
           );
           
-          return isDuplicate ? prev : [...prev, message];
+          if (messageExists) {
+            console.log('Message already exists in UI, skipping');
+            return prev;
+          }
+          
+          // Add new message
+          const newMessages = [...prev, message];
+          // Sort by timestamp to ensure correct order
+          return newMessages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
         });
       }
     };
 
+    const handleRoomCreated = (newRoom) => {
+      console.log('New room created via socket:', newRoom._id);
+      setRooms(prev => {
+        const roomExists = prev.some(r => r._id === newRoom._id);
+        if (!roomExists) {
+          const updatedRooms = [newRoom, ...prev];
+          return updatedRooms.sort((a, b) => 
+            new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)
+          );
+        }
+        return prev;
+      });
+    };
+
+    const handleUserTyping = ({ roomId, userId, isTyping, userName }) => {
+      if (!selectedRoom || selectedRoom._id !== roomId) return;
+      
+      setTypingUsers(prev => {
+        const newTypingUsers = { ...prev };
+        if (isTyping && userId !== user?._id) {
+          if (!newTypingUsers[roomId]) {
+            newTypingUsers[roomId] = new Set();
+          }
+          newTypingUsers[roomId].add({ userId, userName });
+        } else {
+          if (newTypingUsers[roomId]) {
+            // Create a new Set without the specified user
+            const updatedSet = new Set([...newTypingUsers[roomId]].filter(
+              item => !(item.userId === userId && item.userName === userName)
+            ));
+            if (updatedSet.size === 0) {
+              delete newTypingUsers[roomId];
+            } else {
+              newTypingUsers[roomId] = updatedSet;
+            }
+          }
+        }
+        return newTypingUsers;
+      });
+    };
+
+    const handleMessageRead = ({ roomId, userId, messageId }) => {
+      // Update read status of messages
+      if (selectedRoom && selectedRoom._id === roomId && userId !== user?._id) {
+        setMessages(prev => prev.map(msg => 
+          msg._id === messageId ? { ...msg, read: true } : msg
+        ));
+      }
+    };
+
+    // Listen for socket events
     socket.on('receive-message', handleIncomingMessage);
+    socket.on('room-created', handleRoomCreated);
+    socket.on('user-typing', handleUserTyping);
+    socket.on('message-read', handleMessageRead);
+    socket.on('room-updated', fetchChatRooms);
+
+    // Handle connection issues
+    socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+      // Ensure polling is active when socket fails
+      if (selectedRoom?._id && !pollingIntervalRef.current) {
+        startPolling();
+      }
+    });
+
+    socket.on('connect', () => {
+      console.log('Socket connected, rejoining rooms');
+      // Rejoin user room on reconnect
+      socket.emit('join-user', user._id);
+      if (selectedRoom?._id) {
+        socket.emit('join-room', selectedRoom._id);
+      }
+    });
 
     return () => {
+      console.log('Cleaning up socket listeners');
       socket.off('receive-message', handleIncomingMessage);
+      socket.off('room-created', handleRoomCreated);
+      socket.off('user-typing', handleUserTyping);
+      socket.off('message-read', handleMessageRead);
+      socket.off('room-updated', fetchChatRooms);
+      socket.off('connect_error');
+      socket.off('connect');
+      
+      // Leave user room
+      socket.emit('leave-user', user._id);
     };
-  }, [socket, selectedRoom, user?._id]);
+  }, [socket, user?._id, selectedRoom, fetchChatRooms, startPolling]);
 
   const fetchMessages = async (roomId) => {
     try {
       const response = await api.get(`/chat/messages/${roomId}`);
-      setMessages(response.data.messages);
+      const fetchedMessages = response.data.messages || [];
+      setMessages(fetchedMessages);
+      
+      // Update last fetch reference
+      const lastMessage = fetchedMessages[fetchedMessages.length - 1];
+      if (lastMessage) {
+        lastMessageFetchRef.current[roomId] = {
+          _id: lastMessage._id,
+          content: lastMessage.content,
+          timestamp: Date.now()
+        };
+      }
+      
+      // Mark messages as read
+      if (socket) {
+        socket.emit('messages-read', { roomId });
+      }
+      
+      console.log('Fetched messages for room:', roomId, 'count:', fetchedMessages.length);
     } catch (error) {
       console.error('Failed to load messages:', error);
     }
@@ -191,15 +414,28 @@ const ChatPage = () => {
   const handleSelectRoom = (room) => {
     setSelectedRoom(room);
     fetchMessages(room._id);
+    
+    // Reset unread count when selecting a room
+    setRooms(prev => prev.map(r => 
+      r._id === room._id 
+        ? { ...r, unreadCount: 0 }
+        : r
+    ));
+    
+    // Clear typing indicators
+    setTypingUsers({});
   };
 
+  // Join room when selected
   useEffect(() => {
     if (!socket || !selectedRoom?._id) return;
 
     const roomId = selectedRoom._id;
+    console.log('Joining room via socket:', roomId);
     socket.emit('join-room', roomId);
 
     return () => {
+      console.log('Leaving room via socket:', roomId);
       socket.emit('leave-room', roomId);
     };
   }, [socket, selectedRoom?._id]);
@@ -222,30 +458,67 @@ const ChatPage = () => {
       },
       createdAt: new Date().toISOString(),
       type: 'text',
-      isOptimistic: true
+      isOptimistic: true,
+      read: false
     };
 
     console.log('Adding optimistic message:', optimisticMessage._id);
 
     // Add optimistic message to UI immediately
-    setMessages(prev => [...prev, optimisticMessage]);
+    setMessages(prev => {
+      const newMessages = [...prev, optimisticMessage];
+      return newMessages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    });
     
-    // Update rooms list with optimistic message
-    setRooms(prev => prev.map(room => 
-      room._id === selectedRoom._id 
-        ? { 
-            ...room, 
-            lastMessage: optimisticMessage,
-            updatedAt: new Date().toISOString()
-          }
-        : room
-    ));
+    // Update last fetch reference
+    lastMessageFetchRef.current[selectedRoom._id] = {
+      _id: optimisticMessage._id,
+      content: optimisticMessage.content,
+      timestamp: Date.now()
+    };
+    
+    // Update rooms list with optimistic message and bring to top
+    setRooms(prev => {
+      const updatedRooms = prev.map(room => 
+        room._id === selectedRoom._id 
+          ? { 
+              ...room, 
+              lastMessage: optimisticMessage,
+              updatedAt: new Date().toISOString(),
+              unreadCount: 0
+            }
+          : room
+      );
+      
+      // Sort by updatedAt to bring to top
+      return updatedRooms.sort((a, b) => 
+        new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)
+      );
+    });
 
     // Send via WebSocket
+    console.log('Sending message via socket to room:', selectedRoom._id);
     socket.emit('send-message', {
       roomId: selectedRoom._id,
       content: messageContent,
       type: 'text'
+    });
+
+    // Stop typing indicator
+    socket.emit('typing', {
+      roomId: selectedRoom._id,
+      isTyping: false
+    });
+  };
+
+  const handleTyping = (isTyping) => {
+    if (!socket || !selectedRoom) return;
+    
+    socket.emit('typing', {
+      roomId: selectedRoom._id,
+      userId: user?._id,
+      userName: user?.name,
+      isTyping
     });
   };
 
@@ -256,7 +529,15 @@ const ChatPage = () => {
       });
 
       const newRoom = response.data.room;
-      setRooms(prev => [newRoom, ...prev]);
+      
+      // Add to rooms list and sort
+      setRooms(prev => {
+        const updatedRooms = [newRoom, ...prev];
+        return updatedRooms.sort((a, b) => 
+          new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)
+        );
+      });
+      
       setSelectedRoom(newRoom);
       setShowUserList(false);
       fetchMessages(newRoom._id);
@@ -275,6 +556,12 @@ const ChatPage = () => {
       if (selectedRoom && selectedRoom._id === roomId) {
         setSelectedRoom(null);
         setMessages([]);
+        
+        // Clear polling interval
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
       }
     } catch (error) {
       console.error('Failed to delete chat:', error);
@@ -284,7 +571,18 @@ const ChatPage = () => {
   const handleBackToChats = () => {
     setSelectedRoom(null);
     setMessages([]);
+    
+    // Clear polling interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
   };
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   if (loading) {
     return (
@@ -314,9 +612,12 @@ const ChatPage = () => {
           room={selectedRoom}
           messages={messages}
           onSendMessage={handleSendMessage}
+          onTyping={handleTyping}
           onDeleteRoom={() => handleDeleteRoom(selectedRoom?._id)}
           onBack={handleBackToChats}
           isMobile={isMobile}
+          typingUsers={typingUsers[selectedRoom._id]}
+          messagesEndRef={messagesEndRef}
         />
       ) : !isMobile && (
         <div className="chat-welcome-screen">

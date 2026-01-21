@@ -3085,93 +3085,105 @@ io.on('connection', (socket) => {
     console.log(`User ${socket.userId} left room: ${roomId}`);
   });
 
-  socket.on('send-message', async (data) => {
-    try {
-      console.log('[WebSocket] Send message received:', data);
-      console.log('[WebSocket] User ID:', socket.userId);
-      
-      const { roomId, content, type = 'text', mediaUrl } = data || {};
-
-      if (!roomId || !content || !content.trim()) {
-        console.warn('[WebSocket] Invalid send-message payload');
-        return socket.emit('message-error', { error: 'Room ID and message content are required' });
-      }
-      
-      // Make sure room exists and user is a participant
-      const room = await Room.findById(roomId);
-      if (!room) {
-        console.warn('[WebSocket] Room not found for message:', roomId);
-        return socket.emit('message-error', { error: 'Chat room not found' });
-      }
-
-      const isParticipant = room.participants.some(
-        (p) => p.toString() === socket.userId.toString()
-      );
-      if (!isParticipant) {
-        console.warn('[WebSocket] User not in room:', { userId: socket.userId, roomId });
-        return socket.emit('message-error', { error: 'You are not a participant in this room' });
-      }
-      
-      // Determine sender model
-      let senderModel = 'Traveler';
-      let sender = await Traveler.findById(socket.userId);
-      if (!sender) {
-        sender = await Host.findById(socket.userId);
-        senderModel = 'Host';
-      }
   
-      console.log('[WebSocket] Sender found:', sender?.email, 'Model:', senderModel);
+
+socket.on('send-message', async (data) => {
+  try {
+    console.log('[WebSocket] Send message received:', data);
+    console.log('[WebSocket] User ID:', socket.userId);
+    
+    const { roomId, content, type = 'text', mediaUrl } = data || {};
+
+    if (!roomId || !content || !content.trim()) {
       
-      // Create message in MongoDB
-      console.log('[WebSocket] Creating message in database...');
-      const message = await Message.create({
-        sender: socket.userId,
-        senderModel,
-        content: content.trim(),
-        type,
-        mediaUrl,
-        roomId
-      });
-      
-      console.log('[WebSocket] Message created successfully:', message._id);
-
-      // Update room's lastMessage and updatedAt
-      room.lastMessage = message._id;
-      room.updatedAt = new Date();
-      await room.save();
-
-      // Prepare payload with populated sender (shape expected by frontend)
-      const populatedSender = {
-        _id: socket.userId,
-        name: sender?.name || 'Unknown',
-        profilePhoto: sender?.profilePhoto || null
-      };
-
-      const outMessage = {
-        ...message.toObject(),
-        sender: populatedSender
-      };
-
-      // Emit to all sockets in the room (users who joined the room)
-      io.to(roomId).emit('receive-message', outMessage);
-
-      // Additionally notify each participant via their personal channel.
-      // IMPORTANT: exclude sender to avoid duplicate deliveries (sender is already in the room).
-      room.participants.forEach((participantId) => {
-        const pid = participantId.toString();
-        if (pid === socket.userId.toString()) return;
-        io.to(`user:${pid}`).emit('receive-message', outMessage);
-      });
-
-      // Acknowledge back to sender (in case they are not listening to room events)
-      socket.emit('message-sent', outMessage);
-      
-    } catch (error) {
-      console.error('[WebSocket] Send message error:', error);
-      console.error('[WebSocket] Error details:', error.message);
-      socket.emit('message-error', { error: 'Failed to send message' });
+      return socket.emit('message-error', { error: 'Room ID and message content are required' });
     }
-  });
+    
+    // Make sure room exists and user is a participant
+    const room = await Room.findById(roomId);
+    if (!room) {
+      
+      return socket.emit('message-error', { error: 'Chat room not found' });
+    }
+
+    const isParticipant = room.participants.some(
+      (p) => p.toString() === socket.userId.toString()
+    );
+    if (!isParticipant) {
+      
+      return socket.emit('message-error', { error: 'You are not a participant in this room' });
+    }
+    
+    // Determine sender model
+    let senderModel = 'Traveler';
+    let sender = await Traveler.findById(socket.userId);
+    if (!sender) {
+      sender = await Host.findById(socket.userId);
+      senderModel = 'Host';
+    }
+
+    
+    const message = await Message.create({
+      sender: socket.userId,
+      senderModel,
+      content: content.trim(),
+      type,
+      mediaUrl,
+      roomId
+    });
+    
+    room.lastMessage = message._id;
+    room.updatedAt = new Date();
+    await room.save();
+
+    
+    const populatedSender = {
+      _id: socket.userId,
+      name: sender?.name || 'Unknown',
+      profilePhoto: sender?.profilePhoto || null,
+      email: sender?.email || ''
+    };
+
+    const outMessage = {
+      ...message.toObject(),
+      sender: populatedSender
+    };
+
+    console.log('[WebSocket] Emitting to room:', roomId);
+    
+    // Emit to all sockets in the room (users who joined the room)
+    io.to(roomId).emit('receive-message', outMessage);
+
+    // CRITICAL FIX: Also emit to each participant's personal room
+    // This ensures messages are delivered even if receiver hasn't joined the specific room
+    for (const participantId of room.participants) {
+      const pid = participantId.toString();
+      
+      // Skip sender (they already get the message via room emission)
+      if (pid === socket.userId.toString()) continue;
+      
+      console.log('[WebSocket] Sending to participant:', pid);
+      
+      // Emit to the receiver's personal room
+      io.to(`user:${pid}`).emit('receive-message', outMessage);
+      
+      // Also emit room-updated event to update the sidebar
+      io.to(`user:${pid}`).emit('room-updated', {
+        ...room.toObject(),
+        lastMessage: outMessage,
+        updatedAt: new Date()
+      });
+    }
+
+    // Acknowledge back to sender
+    socket.emit('message-sent', outMessage);
+    
+  } catch (error) {
+    console.error('[WebSocket] Send message error:', error);
+    console.error('[WebSocket] Error details:', error.message);
+    socket.emit('message-error', { error: 'Failed to send message' });
+  }
+});
 
   socket.on('typing', (data) => {
     const { roomId, isTyping } = data;
