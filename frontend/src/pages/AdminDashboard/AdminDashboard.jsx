@@ -165,6 +165,23 @@ function AdminDashboard() {
       .substring(0, 2);
   };
 
+  // Add this function after getInitials function (around line 145-150)
+const getCardTypeColor = (cardType) => {
+  const colors = {
+    'Visa': '#1a56db',
+    'MasterCard': '#dc2626',
+    'American Express': '#059669',
+    'Discover': '#ea580c',
+    'Maestro': '#7c3aed',
+    'Rupay': '#2563eb'
+  };
+  return colors[cardType] || '#6b7280';
+};
+
+const getCardTypeTextColor = (cardType) => {
+  return 'white'; // Always white text for better contrast
+};
+
   // Function to get account type badge style
   const getAccountTypeStyle = (type) => {
     const isHost = type === 'host' || type === 'Host';
@@ -416,117 +433,144 @@ function AdminDashboard() {
         </div>
 
         {/* Booking Management */}
-        <section className="admin-dashboard-booking-section">
-          <h3 className="admin-dashboard-booking-title">Booking Management</h3>
+        {/* Booking Management */}
+<section className="admin-dashboard-booking-section">
+  <h3 className="admin-dashboard-booking-title">Booking Management</h3>
 
-          <div>
-            <input
-              type="text"
-              placeholder="Search by guest name, booking ID, or email"
-              onChange={e => setSearchTerm(e.target.value)}
-              className="admin-dashboard-search"
-              value={searchTerm}
-            />
-          </div>
+  <div>
+    <input
+      type="text"
+      placeholder="Search by guest name, booking ID, or email"
+      onChange={e => setSearchTerm(e.target.value)}
+      className="admin-dashboard-search"
+      value={searchTerm}
+    />
+  </div>
 
-          <div className="admin-dashboard-table-wrap">
-            {filteredBookings.length > 0 ? (
-              <table className="admin-dashboard-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Booking ID</th>
-                    <th>Guest Name</th>
-                    <th>Guest Email</th>
-                    <th>Room</th>
-                    <th>Check-In</th>
-                    <th>Check-Out</th>
-                    <th>Total Cost</th>
-                    {/* <th>Guest Email</th> */}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredBookings.map((booking, i) => (
-                    <tr key={booking._id || i}>
-                      <td>{i + 1}</td>
-                      <td>
-                        {booking.bookingId ||
-                          booking._id?.toString().substring(0, 8)}
-                      </td>
-                      <td>
-                        <div className="admin-dashboard-guest-name">
-                          {booking.userName}
-                        </div>
-                      </td>
-                      <td>{booking.userEmail || 'N/A'}</td>
-                      <td>
-                        {booking.roomTitle ? (
-                          <div>
-                            <div className="admin-dashboard-room-title">
-                              {booking.roomTitle}
-                            </div>
-                            {booking.roomId && (
-                              <div className="admin-dashboard-room-id">
-                                ID: {booking.roomId.toString().substring(0, 8)}...
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          'N/A'
-                        )}
-                      </td>
-                      <td>
-                        {booking.checkIn ? (
-                          <div>
-                            {new Date(booking.checkIn).toLocaleDateString()}
-                            <div className="admin-dashboard-date-time">
-                              {new Date(booking.checkIn).toLocaleTimeString(
-                                [],
-                                { hour: '2-digit', minute: '2-digit' }
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          '-'
-                        )}
-                      </td>
-                      <td>
-                        {booking.checkOut ? (
-                          <div>
-                            {new Date(booking.checkOut).toLocaleDateString()}
-                            <div className="admin-dashboard-date-time">
-                              {new Date(booking.checkOut).toLocaleTimeString(
-                                [],
-                                { hour: '2-digit', minute: '2-digit' }
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          '-'
-                        )}
-                      </td>
-                      <td>
-                        <div className="admin-dashboard-cost">
-                          ₹
-                          {booking.totalCost?.toLocaleString('en-IN') ||
-                            booking.amount?.toLocaleString('en-IN') ||
-                            '0'}
-                        </div>
-                      </td>
-                      {/* <td>{booking.userEmail || 'N/A'}</td> */}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className="admin-dashboard-no-data">
-                {searchTerm
-                  ? 'No bookings matching your search.'
-                  : 'Loading bookings...'}
-              </div>
-            )}
-          </div>
-        </section>
+  <div className="admin-dashboard-table-wrap">
+    {filteredBookings.length > 0 ? (
+      <table className="admin-dashboard-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Transaction ID</th>
+            <th>Guest Name</th>
+            <th>Guest Email</th>
+            <th>Room</th>
+            <th>Check-In</th>
+            <th>Check-Out</th>
+            <th>Total Cost</th>
+            <th>Payment Card Type</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredBookings.map((booking, i) => (
+            <tr key={booking._id || i}>
+              <td>{i + 1}</td>
+              <td>
+                {booking.transactionId ||
+                  booking._id?.toString().substring(0, 8)}
+              </td>
+              <td>
+                <div className="admin-dashboard-guest-name">
+                  {booking.userName}
+                </div>
+              </td>
+              <td>{booking.userEmail || 'N/A'}</td>
+              <td>
+                {booking.roomTitle ? (
+                  <div>
+                    <div className="admin-dashboard-room-title">
+                      {booking.roomTitle}
+                    </div>
+                    {booking.roomId && (
+                      <div className="admin-dashboard-room-id">
+                        ID: {booking.roomId.toString().substring(0, 8)}...
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  'N/A'
+                )}
+              </td>
+              <td>
+                {booking.checkIn ? (
+                  <div>
+                    {new Date(booking.checkIn).toLocaleDateString()}
+                    <div className="admin-dashboard-date-time">
+                      {new Date(booking.checkIn).toLocaleTimeString(
+                        [],
+                        { hour: '2-digit', minute: '2-digit' }
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  '-'
+                )}
+              </td>
+              <td>
+                {booking.checkOut ? (
+                  <div>
+                    {new Date(booking.checkOut).toLocaleDateString()}
+                    <div className="admin-dashboard-date-time">
+                      {new Date(booking.checkOut).toLocaleTimeString(
+                        [],
+                        { hour: '2-digit', minute: '2-digit' }
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  '-'
+                )}
+              </td>
+              <td>
+                <div className="admin-dashboard-cost">
+                  ₹
+                  {booking.totalCost?.toLocaleString('en-IN') ||
+                    booking.amount?.toLocaleString('en-IN') ||
+                    '0'}
+                </div>
+              </td>
+              <td>
+                {booking.cardType ? (
+                  <span className="admin-dashboard-card-type" style={{
+                    backgroundColor: getCardTypeColor(booking.cardType),
+                    color: getCardTypeTextColor(booking.cardType),
+                    padding: '4px 12px',
+                    borderRadius: '20px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    display: 'inline-block'
+                  }}>
+                    {booking.cardType}
+                  </span>
+                ) : (
+                  <span style={{
+                    backgroundColor: '#f3f4f6',
+                    color: '#6b7280',
+                    padding: '4px 12px',
+                    borderRadius: '20px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    display: 'inline-block'
+                  }}>
+                    Not specified
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    ) : (
+      <div className="admin-dashboard-no-data">
+        {searchTerm
+          ? 'No bookings matching your search.'
+          : 'Loading bookings...'}
+      </div>
+    )}
+  </div>
+</section>
       </div>
     </div>
   );

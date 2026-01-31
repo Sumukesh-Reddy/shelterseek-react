@@ -20,6 +20,7 @@ const AdminMaps = () => {
     setError(null);
     
     try {
+      // Fetch hosts data
       const hostsResponse = await fetch('http://localhost:3001/api/hosts');
       
       if (!hostsResponse.ok) {
@@ -43,6 +44,7 @@ const AdminMaps = () => {
       
       console.log('Extracted hosts array:', hostsArray);
       
+      // Filter to only include hosts
       const filteredHosts = hostsArray.filter(host => {
         const isHost = 
           host.accountType === 'host' ||
@@ -59,67 +61,73 @@ const AdminMaps = () => {
       
       console.log('Filtered hosts:', filteredHosts);
       
-      const roomsResponse = await fetch('http://localhost:3001/api/rooms');
-      
-      if (!roomsResponse.ok) {
-        throw new Error(`Failed to fetch rooms: ${roomsResponse.status}`);
-      }
-      
-      const roomsData = await roomsResponse.json();
-      console.log('Rooms API response:', roomsData);
-      
-      let roomsArray = [];
-      
-      if (Array.isArray(roomsData)) {
-        roomsArray = roomsData;
-      } else if (roomsData && Array.isArray(roomsData.data)) {
-        roomsArray = roomsData.data;
-      }
-      
-      console.log('Total rooms found:', roomsArray.length);
-      
-      const hostsWithRoomCounts = filteredHosts.map(host => {
-        const hostEmail = host.email || host.userEmail;
-        
-        if (!hostEmail) {
-          console.warn('Host missing email:', host);
+      // For each host, fetch their rooms count using the dedicated endpoint
+      const hostsWithRoomCounts = await Promise.all(
+        filteredHosts.map(async (host) => {
+          const hostEmail = host.email || host.userEmail;
+          
+          if (!hostEmail) {
+            console.warn('Host missing email:', host);
+            return {
+              ...host,
+              _id: host._id || host.id || `host-${Date.now()}-${Math.random()}`,
+              name: host.name || 'Unknown Host',
+              email: '',
+              roomCount: 0
+            };
+          }
+          
+          let roomCount = 0;
+          try {
+            // Use the dedicated endpoint for each host
+            const roomsResponse = await fetch(`http://localhost:3001/api/rooms/host/${encodeURIComponent(hostEmail)}`);
+            
+            if (roomsResponse.ok) {
+              const roomsData = await roomsResponse.json();
+              console.log(`Rooms for ${hostEmail}:`, roomsData);
+              
+              // Handle different response structures
+              if (Array.isArray(roomsData)) {
+                roomCount = roomsData.length;
+              } else if (roomsData && Array.isArray(roomsData.rooms)) {
+                roomCount = roomsData.rooms.length;
+              } else if (roomsData && Array.isArray(roomsData.data)) {
+                roomCount = roomsData.data.length;
+              } else if (roomsData && typeof roomsData.count === 'number') {
+                roomCount = roomsData.count;
+              } else if (roomsData && typeof roomsData.total === 'number') {
+                roomCount = roomsData.total;
+              }
+            } else {
+              console.warn(`Failed to fetch rooms for ${hostEmail}: ${roomsResponse.status}`);
+            }
+          } catch (err) {
+            console.error(`Error fetching rooms for ${hostEmail}:`, err);
+          }
+          
+          console.log(`Host ${host.name || 'Unknown'} (${hostEmail}) has ${roomCount} rooms`);
+          
           return {
             ...host,
             _id: host._id || host.id || `host-${Date.now()}-${Math.random()}`,
             name: host.name || 'Unknown Host',
-            email: '',
-            roomCount: 0
+            email: hostEmail,
+            roomCount: roomCount
           };
-        }
-        
-        const roomCount = roomsArray.filter(room => {
-          const roomEmail = room.email || room.hostEmail || room.ownerEmail;
-          
-          if (!roomEmail) return false;
-          
-          return roomEmail.toLowerCase().trim() === hostEmail.toLowerCase().trim();
-        }).length;
-        
-        console.log(`Host ${host.name} (${hostEmail}) has ${roomCount} rooms`);
-        
-        return {
-          ...host,
-          _id: host._id || host.id || `host-${Date.now()}-${Math.random()}`,
-          name: host.name || 'Unknown Host',
-          email: hostEmail,
-          roomCount: roomCount || host.roomCount || 0
-        };
-      });
+        })
+      );
       
+      // Sort hosts by room count (descending)
       const sortedHosts = hostsWithRoomCounts.sort((a, b) => b.roomCount - a.roomCount);
       
       console.log('Final hosts with room counts:', sortedHosts);
       setHosts(sortedHosts);
       
     } catch (err) {
-      console.error('Error fetching data:', err);
+      console.error('Error fetching hosts data:', err);
       setError(err.message);
       
+      // Fallback: try to get hosts without room counts
       try {
         console.log('Trying fallback endpoint...');
         const fallbackResponse = await fetch('http://localhost:3001/api/users?accountType=host');
@@ -408,12 +416,14 @@ const AdminMaps = () => {
     roomCountBadge: {
       display: 'inline-flex',
       alignItems: 'center',
+      justifyContent: 'center',
       padding: '6px 16px',
       borderRadius: 50,
       fontSize: 13,
       fontWeight: 700,
       letterSpacing: '0.3px',
-      textTransform: 'uppercase'
+      textTransform: 'uppercase',
+      minWidth: 80
     },
     roomCountMany: {
       background: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%)',
@@ -445,6 +455,27 @@ const AdminMaps = () => {
       fontWeight: 600,
       color: '#1f2937',
       fontSize: 15
+    },
+    refreshButton: {
+      position: 'absolute',
+      right: 0,
+      top: '50%',
+      transform: 'translateY(-50%)',
+      background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
+      color: 'white',
+      border: 'none',
+      padding: '10px 20px',
+      borderRadius: 50,
+      cursor: 'pointer',
+      fontSize: 13,
+      fontWeight: 700,
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+      boxShadow: '0 4px 16px rgba(236, 72, 153, 0.3)',
+      transition: 'all 0.3s ease',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8
     }
   };
 
@@ -494,11 +525,23 @@ const AdminMaps = () => {
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
+        
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        ::-webkit-scrollbar {
+          display: none;
+        }
+        
+        /* Hide scrollbar for IE, Edge and Firefox */
+        * {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
       `}</style>
       
       <div style={styles.header}>
         <h1 style={styles.title}>Hosts Management</h1>
         <p style={styles.subtitle}>Manage and monitor all your property hosts</p>
+        
       </div>
 
       {error && (
@@ -616,8 +659,9 @@ const AdminMaps = () => {
                           e.target.style.boxShadow = '0 8px 24px rgba(236, 72, 153, 0.35)';
                         }}
                         aria-label={`View map for ${host.name}`}
+                        disabled={!host.email}
                       >
-                        View Map
+                        {host.email ? 'View Map' : 'No Email'}
                       </button>
                     </td>
                   </tr>
@@ -649,7 +693,7 @@ const AdminMaps = () => {
                   <div style={{ textAlign: 'right' }}>
                     <div style={styles.label}>Rooms</div>
                     <span style={getRoomCountStyle(host.roomCount)}>
-                      {host.roomCount || 0}
+                      {host.roomCount || 0} {host.roomCount === 1 ? 'room' : 'rooms'}
                     </span>
                   </div>
                 </div>
@@ -659,7 +703,11 @@ const AdminMaps = () => {
                 </div>
                 <button
                   style={{ ...styles.btnView, width: '100%', justifyContent: 'center', display: 'flex' }}
-                  onClick={() => navigate(`/admin/maps/${encodeURIComponent(host.email)}`)}
+                  onClick={() => {
+                    if (host.email) {
+                      navigate(`/admin/maps/${encodeURIComponent(host.email)}`);
+                    }
+                  }}
                   onMouseEnter={e => {
                     e.target.style.transform = 'translateY(-2px)';
                     e.target.style.boxShadow = '0 12px 32px rgba(236, 72, 153, 0.45)';
@@ -668,8 +716,9 @@ const AdminMaps = () => {
                     e.target.style.transform = 'translateY(0)';
                     e.target.style.boxShadow = '0 8px 24px rgba(236, 72, 153, 0.35)';
                   }}
+                  disabled={!host.email}
                 >
-                  View Map
+                  {host.email ? 'View Map' : 'No Email'}
                 </button>
               </div>
             ))}
