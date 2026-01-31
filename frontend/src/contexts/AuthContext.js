@@ -17,16 +17,16 @@ export const AuthProvider = ({ children }) => {
     if (storedToken && storedUser) {
       setToken(storedToken);
 
-      // Normalize user object so it always has `_id`
+      
       try {
         const parsedUser = JSON.parse(storedUser);
         const normalizedUser = {
           ...parsedUser,
-          _id: parsedUser._id || parsedUser.id, // ensure _id is always available
+          _id: parsedUser._id || parsedUser.id, 
         };
         setUser(normalizedUser);
       } catch {
-        // Fallback in case of parse error
+        
         setUser(null);
       }
       
