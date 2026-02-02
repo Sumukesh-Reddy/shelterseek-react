@@ -184,7 +184,20 @@ const InfoGrid = ({ children }) => (
 
 // ✅ Image Gallery Component
 const ImageGallery = ({ images }) => {
-  if (!images?.length) return null;
+  if (!images?.length) {
+    console.log('No images to display:', images);
+    return null;
+  }
+  
+  // Process image URLs like in RoomLayout
+  const processImageUrl = (img) => {
+    if (img.startsWith('http')) return img;
+    if (img.startsWith('/')) return `http://localhost:3001${img}`;
+    if (/^[0-9a-fA-F]{24}$/.test(img)) return `http://localhost:3001/api/images/${img}`;
+    return '/images/logo.png';
+  };
+  
+  console.log('ImageGallery received images:', images);
   
   return (
     <div style={{ marginTop: "12px" }}>
@@ -194,7 +207,7 @@ const ImageGallery = ({ images }) => {
         marginBottom: "8px",
         fontSize: "14px"
       }}>
-        Room Images:
+        Room Images ({images.length}):
       </div>
       <div style={{
         display: "grid",
@@ -203,24 +216,34 @@ const ImageGallery = ({ images }) => {
         maxHeight: "120px",
         overflowY: "auto"
       }}>
-        {images.map((id, index) => (
-          <img
-            key={index}
-            src={`/api/images/${id}`}
-            alt="Room"
-            style={{
-              width: "100%",
-              height: "80px",
-              borderRadius: "8px",
-              border: "2px solid #e5e7eb",
-              objectFit: "cover",
-              cursor: "pointer",
-              transition: "transform 0.2s"
-            }}
-            onMouseEnter={e => e.target.style.transform = "scale(1.05)"}
-            onMouseLeave={e => e.target.style.transform = "scale(1)"}
-          />
-        ))}
+        {images.map((img, index) => {
+          const imageUrl = processImageUrl(img);
+          console.log(`Image ${index}: ${img} -> ${imageUrl}`);
+          
+          return (
+            <img
+              key={index}
+              src={imageUrl}
+              alt="Room"
+              style={{
+                width: "100%",
+                height: "80px",
+                borderRadius: "8px",
+                border: "2px solid #e5e7eb",
+                objectFit: "cover",
+                cursor: "pointer",
+                transition: "transform 0.2s"
+              }}
+              onMouseEnter={e => e.target.style.transform = "scale(1.05)"}
+              onMouseLeave={e => e.target.style.transform = "scale(1)"}
+              onError={(e) => {
+                console.error(`Failed to load image: ${imageUrl}`);
+                e.target.onerror = null;
+                e.target.src = '/images/logo.png';
+              }}
+            />
+          );
+        })}
       </div>
     </div>
   );
