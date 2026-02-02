@@ -1704,7 +1704,7 @@ app.get('/api/rooms/count', async (req, res) => {
       counts: {
         total: totalRooms,
         available: availableRooms,
-        booked: totalBookedRooms,      // ✅ NOW FROM BOOKINGS
+        booked: totalBookedRooms,      //  NOW FROM BOOKINGS
         thisMonthBooked,
         thisWeekBooked
       },
@@ -2317,7 +2317,7 @@ function generateSearchResponse(query, foundRooms) {
   
   // Build response
   let reply = `🔍 **Search Results for "${query}"**\n\n`;
-  reply += `✅ Found **${foundRooms.length} room${foundRooms.length !== 1 ? 's' : ''}** `;
+  reply += ` Found **${foundRooms.length} room${foundRooms.length !== 1 ? 's' : ''}** `;
   
   if (locations.length === 1) {
     reply += `in **${locations[0]}** `;

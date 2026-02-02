@@ -970,33 +970,36 @@ const HostDashboard = () => {
 
                             {/* Contact Traveler Button */}
                             {booking.travelerEmail && (
-                              <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-                                <button
-                                  onClick={() => navigate('/message', { 
-                                    state: { 
-                                      travelerEmail: booking.travelerEmail,
-                                      travelerName: booking.travelerName || 'Guest',
+                            <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+                              <button
+                                onClick={() => navigate('/chat', { 
+                                  state: {
+                                    startChatWith: {
+                                      email: booking.travelerEmail,
+                                      name: booking.travelerName || 'Traveler',
+                                      profilePhoto: null, // You can add traveler profile photo if available
                                       bookingId: booking.bookingId || booking._id
                                     }
-                                  })}
-                                  style={{
-                                    padding: '0.5rem 1.5rem',
-                                    backgroundColor: '#d72d6e',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '0.375rem',
-                                    cursor: 'pointer',
-                                    fontSize: '0.875rem',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.5rem'
-                                  }}
-                                >
-                                  <FontAwesomeIcon icon={faEnvelope} />
-                                  Contact Traveler
-                                </button>
-                              </div>
-                            )}
+                                  }
+                                })}
+                                style={{
+                                  padding: '0.5rem 1.5rem',
+                                  backgroundColor: '#d72d6e',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '0.375rem',
+                                  cursor: 'pointer',
+                                  fontSize: '0.875rem',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.5rem'
+                                }}
+                              >
+                                <FontAwesomeIcon icon={faEnvelope} />
+                                Contact Traveler
+                              </button>
+                            </div>
+                          )}
                           </div>
                         )}
                       </div>

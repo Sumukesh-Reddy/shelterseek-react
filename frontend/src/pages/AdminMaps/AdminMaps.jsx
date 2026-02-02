@@ -15,143 +15,157 @@ const AdminMaps = () => {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  // Function to get host image - using room's first image as fallback
+  const getHostImage = (room) => {
+    // First, try hostImage field
+    if (room.hostImage) {
+      if (room.hostImage.startsWith('http')) {
+        return room.hostImage;
+      }
+      if (/^[0-9a-fA-F]{24}$/.test(room.hostImage)) {
+        return `http://localhost:3001/api/images/${room.hostImage}`;
+      }
+    }
+    
+    // If no hostImage, try to use first room image
+    if (room.images && room.images.length > 0 && room.images[0]) {
+      const firstImage = room.images[0];
+      if (/^[0-9a-fA-F]{24}$/.test(firstImage)) {
+        return `http://localhost:3001/api/images/${firstImage}`;
+      }
+    }
+    
+    // Fallback to logo
+    return '/images/logo.png';
+  };
+
   const fetchHostsData = async () => {
     setLoading(true);
     setError(null);
     
     try {
-      // Fetch hosts data
-      const hostsResponse = await fetch('http://localhost:3001/api/hosts');
+      // Fetch rooms data
+      const roomsResponse = await fetch('http://localhost:3001/api/rooms');
       
-      if (!hostsResponse.ok) {
-        throw new Error(`Failed to fetch hosts: ${hostsResponse.status}`);
+      if (!roomsResponse.ok) {
+        throw new Error(`Failed to fetch rooms: ${roomsResponse.status}`);
       }
       
-      const hostsData = await hostsResponse.json();
-      console.log('Hosts API response:', hostsData);
+      const responseData = await roomsResponse.json();
+      console.log('Rooms API response:', responseData);
       
-      let hostsArray = [];
+      let roomsArray = [];
       
-      if (Array.isArray(hostsData)) {
-        hostsArray = hostsData;
-      } else if (hostsData && Array.isArray(hostsData.hosts)) {
-        hostsArray = hostsData.hosts;
-      } else if (hostsData && Array.isArray(hostsData.data)) {
-        hostsArray = hostsData.data;
+      // Based on the API response structure you showed
+      if (responseData.status === "success" && Array.isArray(responseData.data)) {
+        roomsArray = responseData.data;
+      } else if (Array.isArray(responseData)) {
+        roomsArray = responseData;
+      } else if (responseData && Array.isArray(responseData.data)) {
+        roomsArray = responseData.data;
       } else {
-        console.warn('Unexpected hosts data structure:', hostsData);
+        console.warn('Unexpected rooms data structure:', responseData);
+        roomsArray = [];
       }
       
-      console.log('Extracted hosts array:', hostsArray);
+      console.log('Number of rooms found:', roomsArray.length);
+      console.log('First room sample:', roomsArray[0]);
       
-      // Filter to only include hosts
-      const filteredHosts = hostsArray.filter(host => {
-        const isHost = 
-          host.accountType === 'host' ||
-          host.role === 'host' ||
-          host.userType === 'host' ||
-          (!host.accountType && !host.role && !host.userType);
+      // Group rooms by host email to get unique hosts
+      const hostMap = new Map();
+      
+      roomsArray.forEach(room => {
+        const hostEmail = room.email || room.hostEmail;
         
-        if (!isHost) {
-          console.log('Filtered out non-host:', host);
+        if (!hostEmail) {
+          console.log('Room missing email:', room.title || room._id);
+          return;
         }
         
-        return isHost;
+        if (hostMap.has(hostEmail)) {
+          // Update existing host - increment room count
+          const existingHost = hostMap.get(hostEmail);
+          hostMap.set(hostEmail, {
+            ...existingHost,
+            roomCount: existingHost.roomCount + 1,
+            rooms: [...existingHost.rooms, room]
+          });
+        } else {
+          // Create new host entry
+          hostMap.set(hostEmail, {
+            _id: room._id || `host-${Date.now()}-${Math.random()}`,
+            name: room.name || 'Unknown Host',
+            email: hostEmail,
+            image: getHostImage(room),
+            location: room.location,
+            coordinates: room.coordinates,
+            hostGender: room.hostGender,
+            yearsWithUs: room.yearsWithUs || 0,
+            phone: room.phone || '',
+            createdAt: room.createdAt,
+            roomCount: 1,
+            rooms: [room]
+          });
+        }
       });
       
-      console.log('Filtered hosts:', filteredHosts);
+      // Convert map to array and sort by room count
+      let hostsArray = Array.from(hostMap.values())
+        .sort((a, b) => b.roomCount - a.roomCount);
       
-      // For each host, fetch their rooms count using the dedicated endpoint
-      const hostsWithRoomCounts = await Promise.all(
-        filteredHosts.map(async (host) => {
-          const hostEmail = host.email || host.userEmail;
-          
-          if (!hostEmail) {
-            console.warn('Host missing email:', host);
-            return {
-              ...host,
-              _id: host._id || host.id || `host-${Date.now()}-${Math.random()}`,
-              name: host.name || 'Unknown Host',
-              email: '',
-              roomCount: 0
-            };
-          }
-          
-          let roomCount = 0;
-          try {
-            // Use the dedicated endpoint for each host
-            const roomsResponse = await fetch(`http://localhost:3001/api/rooms/host/${encodeURIComponent(hostEmail)}`);
-            
-            if (roomsResponse.ok) {
-              const roomsData = await roomsResponse.json();
-              console.log(`Rooms for ${hostEmail}:`, roomsData);
-              
-              // Handle different response structures
-              if (Array.isArray(roomsData)) {
-                roomCount = roomsData.length;
-              } else if (roomsData && Array.isArray(roomsData.rooms)) {
-                roomCount = roomsData.rooms.length;
-              } else if (roomsData && Array.isArray(roomsData.data)) {
-                roomCount = roomsData.data.length;
-              } else if (roomsData && typeof roomsData.count === 'number') {
-                roomCount = roomsData.count;
-              } else if (roomsData && typeof roomsData.total === 'number') {
-                roomCount = roomsData.total;
-              }
-            } else {
-              console.warn(`Failed to fetch rooms for ${hostEmail}: ${roomsResponse.status}`);
-            }
-          } catch (err) {
-            console.error(`Error fetching rooms for ${hostEmail}:`, err);
-          }
-          
-          console.log(`Host ${host.name || 'Unknown'} (${hostEmail}) has ${roomCount} rooms`);
-          
-          return {
-            ...host,
-            _id: host._id || host.id || `host-${Date.now()}-${Math.random()}`,
-            name: host.name || 'Unknown Host',
-            email: hostEmail,
-            roomCount: roomCount
-          };
-        })
-      );
+      console.log('Hosts extracted from rooms:', hostsArray.length, hostsArray);
       
-      // Sort hosts by room count (descending)
-      const sortedHosts = hostsWithRoomCounts.sort((a, b) => b.roomCount - a.roomCount);
-      
-      console.log('Final hosts with room counts:', sortedHosts);
-      setHosts(sortedHosts);
+      // Set hosts state
+      setHosts(hostsArray);
       
     } catch (err) {
-      console.error('Error fetching hosts data:', err);
+      console.error('Error fetching rooms data:', err);
       setError(err.message);
       
-      // Fallback: try to get hosts without room counts
+      // Fallback to hosts API
       try {
-        console.log('Trying fallback endpoint...');
-        const fallbackResponse = await fetch('http://localhost:3001/api/users?accountType=host');
+        console.log('Trying fallback to hosts API...');
+        const hostsResponse = await fetch('http://localhost:3001/api/hosts');
         
-        if (fallbackResponse.ok) {
-          const fallbackData = await fallbackResponse.json();
+        if (hostsResponse.ok) {
+          const hostsData = await hostsResponse.json();
+          console.log('Hosts API fallback response:', hostsData);
           
-          let fallbackArray = [];
-          if (Array.isArray(fallbackData)) {
-            fallbackArray = fallbackData;
-          } else if (fallbackData && Array.isArray(fallbackData.data)) {
-            fallbackArray = fallbackData.data;
+          let hostsArray = [];
+          if (Array.isArray(hostsData)) {
+            hostsArray = hostsData;
+          } else if (hostsData && Array.isArray(hostsData.hosts)) {
+            hostsArray = hostsData.hosts;
+          } else if (hostsData && Array.isArray(hostsData.data)) {
+            hostsArray = hostsData.data;
           }
           
-          const fallbackHosts = fallbackArray.map(host => ({
+          // Filter to only include hosts
+          const filteredHosts = hostsArray.filter(host => {
+            const isHost = 
+              host.accountType === 'host' ||
+              host.role === 'host' ||
+              host.userType === 'host' ||
+              (!host.accountType && !host.role && !host.userType);
+            return isHost;
+          });
+          
+          // Process hosts
+          const processedHosts = filteredHosts.map(host => ({
             ...host,
             _id: host._id || host.id || `host-${Date.now()}-${Math.random()}`,
             name: host.name || 'Unknown Host',
-            email: host.email || '',
-            roomCount: 0
+            email: host.email || host.userEmail || '',
+            image: host.image ? 
+              (host.image.startsWith('http') ? host.image : `http://localhost:3001${host.image}`) 
+              : '/images/logo.png',
+            location: host.location || '',
+            roomCount: 0,
+            rooms: []
           }));
           
-          setHosts(fallbackHosts);
-          setError('Could not fetch room counts, but loaded hosts. ' + err.message);
+          setHosts(processedHosts);
+          setError('Loaded hosts from fallback API: ' + err.message);
         }
       } catch (fallbackErr) {
         console.error('Fallback also failed:', fallbackErr);
@@ -168,7 +182,8 @@ const AdminMaps = () => {
 
   const filteredHosts = hosts.filter(host =>
     (host.name ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (host.email ?? '').toLowerCase().includes(searchTerm.toLowerCase())
+    (host.email ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (host.location ?? '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const styles = {
@@ -456,6 +471,38 @@ const AdminMaps = () => {
       color: '#1f2937',
       fontSize: 15
     },
+    hostImage: {
+      width: 48,
+      height: 48,
+      borderRadius: '50%',
+      objectFit: 'cover',
+      marginRight: 12,
+      border: '2px solid #f3f4f6',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+      backgroundColor: '#f3f4f6'
+    },
+    hostInfo: {
+      display: 'flex',
+      alignItems: 'center'
+    },
+    mobileHostImage: {
+      width: 40,
+      height: 40,
+      borderRadius: '50%',
+      objectFit: 'cover',
+      marginRight: 12,
+      border: '2px solid #f3f4f6',
+      backgroundColor: '#f3f4f6'
+    },
+    hostDetails: {
+      display: 'flex',
+      flexDirection: 'column'
+    },
+    hostMeta: {
+      fontSize: 12,
+      color: '#6b7280',
+      marginTop: 2
+    },
     refreshButton: {
       position: 'absolute',
       right: 0,
@@ -487,6 +534,26 @@ const AdminMaps = () => {
     if (count >= 5) return { ...styles.roomCountBadge, ...styles.roomCountMany };
     if (count >= 1) return { ...styles.roomCountBadge, ...styles.roomCountSome };
     return { ...styles.roomCountBadge, ...styles.roomCountNone };
+  };
+
+  const handleImageError = (e) => {
+    console.log('Image failed to load:', e.target.src);
+    e.target.onerror = null;
+    e.target.src = '/images/logo.png';
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    } catch (e) {
+      return 'N/A';
+    }
   };
 
   if (loading) {
@@ -541,13 +608,20 @@ const AdminMaps = () => {
       <div style={styles.header}>
         <h1 style={styles.title}>Hosts Management</h1>
         <p style={styles.subtitle}>Manage and monitor all your property hosts</p>
-        
+        <button 
+          style={styles.refreshButton}
+          onClick={fetchHostsData}
+          onMouseEnter={e => e.target.style.transform = 'translateY(-50%) scale(1.05)'}
+          onMouseLeave={e => e.target.style.transform = 'translateY(-50%) scale(1)'}
+        >
+          🔄 Refresh
+        </button>
       </div>
 
       {error && (
         <div style={styles.errorContainer}>
           <div style={styles.errorTitle}>⚠️ Warning</div>
-          <div style={{ color: '#991b1b' }}>{error}</div>
+          <div style={{ color: '#991b1b', fontSize: 14 }}>{error}</div>
           <button 
             style={styles.retryButton}
             onClick={fetchHostsData}
@@ -595,7 +669,7 @@ const AdminMaps = () => {
           <input
             type="text"
             style={styles.pillInput}
-            placeholder="Search hosts by name or email..."
+            placeholder="Search hosts by name, email, or location..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             onFocus={(e) => {
@@ -617,8 +691,8 @@ const AdminMaps = () => {
             <table style={styles.table}>
               <thead style={styles.thead}>
                 <tr>
-                  <th style={styles.th}>Host Name</th>
-                  <th style={styles.th}>Email</th>
+                  <th style={styles.th}>Host Profile</th>
+                  <th style={styles.th}>Contact Info</th>
                   <th style={styles.th}>Rooms</th>
                   <th style={styles.th}>Actions</th>
                 </tr>
@@ -636,10 +710,50 @@ const AdminMaps = () => {
                     }}
                   >
                     <td style={styles.td}>
-                      <div style={styles.hostName}>{host.name}</div>
+                      <div style={styles.hostInfo}>
+                        <img 
+                          src={host.image} 
+                          alt={host.name}
+                          style={styles.hostImage}
+                          onError={handleImageError}
+                          loading="lazy"
+                        />
+                        <div style={styles.hostDetails}>
+                          <div style={styles.hostName}>{host.name}</div>
+                          {host.location && (
+                            <div style={styles.hostMeta}>
+                              📍 {host.location}
+                            </div>
+                          )}
+                          {host.hostGender && (
+                            <div style={styles.hostMeta}>
+                              {host.hostGender === 'Female' ? '👩' : '👨'} {host.hostGender}
+                            </div>
+                          )}
+                          {host.yearsWithUs > 0 && (
+                            <div style={styles.hostMeta}>
+                              ⏳ {host.yearsWithUs} year{host.yearsWithUs !== 1 ? 's' : ''} with us
+                            </div>
+                          )}
+                          {host.createdAt && (
+                            <div style={styles.hostMeta}>
+                              📅 Joined: {formatDate(host.createdAt)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td style={styles.td}>
-                      <div style={{ color: '#6b7280', fontSize: 14 }}>{host.email || 'N/A'}</div>
+                      <div style={{ fontSize: 14 }}>
+                        <div style={{ marginBottom: 4 }}>
+                          <strong>Email:</strong> {host.email || 'N/A'}
+                        </div>
+                        {host.phone && (
+                          <div style={{ color: '#6b7280' }}>
+                            <strong>Phone:</strong> {host.phone}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td style={styles.td}>
                       <span style={getRoomCountStyle(host.roomCount)}>
@@ -686,9 +800,22 @@ const AdminMaps = () => {
               >
                 <div style={styles.mobileCardBorder}></div>
                 <div style={styles.mobileRow}>
-                  <div>
-                    <div style={styles.label}>Host</div>
-                    <div style={{ ...styles.value, fontWeight: 600 }}>{host.name}</div>
+                  <div style={styles.hostInfo}>
+                    <img 
+                      src={host.image} 
+                      alt={host.name}
+                      style={styles.mobileHostImage}
+                      onError={handleImageError}
+                      loading="lazy"
+                    />
+                    <div>
+                      <div style={{ ...styles.value, fontWeight: 600 }}>{host.name}</div>
+                      {host.location && (
+                        <div style={{ color: '#6b7280', fontSize: 10 }}>
+                          📍 {host.location}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={styles.label}>Rooms</div>
@@ -697,10 +824,36 @@ const AdminMaps = () => {
                     </span>
                   </div>
                 </div>
-                <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 12 }}>
                   <div style={styles.label}>Email</div>
                   <div style={{ ...styles.value, fontSize: 13 }}>{host.email || 'N/A'}</div>
                 </div>
+                {host.phone && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={styles.label}>Phone</div>
+                    <div style={{ ...styles.value, fontSize: 13 }}>{host.phone}</div>
+                  </div>
+                )}
+                {(host.yearsWithUs > 0 || host.createdAt) && (
+                  <div style={{ marginBottom: 16, display: 'flex', gap: 16 }}>
+                    {host.yearsWithUs > 0 && (
+                      <div>
+                        <div style={styles.label}>Years with us</div>
+                        <div style={{ ...styles.value, fontSize: 13 }}>
+                          {host.yearsWithUs} year{host.yearsWithUs !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    )}
+                    {host.createdAt && (
+                      <div>
+                        <div style={styles.label}>Joined</div>
+                        <div style={{ ...styles.value, fontSize: 13 }}>
+                          {formatDate(host.createdAt)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <button
                   style={{ ...styles.btnView, width: '100%', justifyContent: 'center', display: 'flex' }}
                   onClick={() => {
