@@ -34,7 +34,7 @@ import HostDetails from './pages/AdminNotifications/HostDetails';
 import AdminTrends from './pages/AdminTrends/AdminTrends';
 import TravelerDetails from './pages/AdminNotifications/TravelerDetails';
 import HotelChatbot  from './pages/HotelChatBot/HotelChatbot';
-// import ChatbotIcon from './components/ChatbotIcon/ChatbotIcon';
+import ChatbotIcon from './components/ChatbotIcon/ChatbotIcon';
 import HostRequests from "./pages/HostRequests/HostRequests";
 import { AuthProvider } from './contexts/AuthContext';
 import { SocketProvider } from './contexts/SocketContext';
@@ -44,7 +44,7 @@ function App() {
   return (
     <Provider store={store}>
       <Router>
-        {/* <ChatbotIcon /> */}
+        <ChatbotIcon />
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/about" element={<About />} />
