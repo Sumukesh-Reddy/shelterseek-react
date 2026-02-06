@@ -14,6 +14,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const mkdirp = require('mkdirp');
 const qrcode = require('qrcode');
+const helmet = require('helmet');
 const hostController = require('./controllers/hostController');
 const adminController = require('./controllers/adminController');
 const http = require('http');
@@ -21,7 +22,8 @@ const { Server } = require('socket.io');
 const { Traveler, Host } = require('./model/usermodel');
 const Message = require('./model/Message');
 const Room = require('./model/chatRoom');
-
+const rfs = require("rotating-file-stream");
+const morgan = require('morgan');
 
 const RoomData = require('./model/Room');
 // At the top of app.js with other requires
@@ -155,6 +157,17 @@ const hostRoutes = require('./routes/hostRoutes');
 app.use('/auth', authRoutes);
 app.use('/api', hostRoutes);
 
+
+const logDirectory = path.join(__dirname, 'logs');
+mkdirp.sync(logDirectory);
+const accessLogStream = rfs.createStream('access.log', {
+  interval: '1d',
+  path: logDirectory,
+});
+
+app.use(helmet());
+
+app.use(morgan('combined', { stream: accessLogStream }));
 const otpStore = {};
 const verifiedEmails = new Set();
 
@@ -3264,7 +3277,11 @@ setTimeout(async () => {
 console.log("[AI] Chat system initialized using /api/rooms endpoint");
 app.delete('/api/users/:id', adminController.deleteUser);
 
-// IMPORTANT: Socket.IO is attached to `server`, so we must listen on `server` (not `app`)
+app.use((err, req, res, next) => {
+  console.error(err.message);
+  res.status(500).json({ error: err.message });
+});
+
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
