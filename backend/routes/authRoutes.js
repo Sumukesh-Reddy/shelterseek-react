@@ -79,11 +79,7 @@ router.post('/logout', (req, res) => {
       res.json({ success: true, message: 'Logged out successfully' });
     });
   } catch (error) {
-    logRouteError(error, req);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Logout failed' 
-    });
+    
   }
 });
 

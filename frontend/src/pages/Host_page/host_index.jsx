@@ -5,8 +5,9 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './host_index.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faUser } from '@fortawesome/free-solid-svg-icons';
+import { faUser, faSyncAlt } from '@fortawesome/free-solid-svg-icons';
 import Footer from '../../components/Footer/Footer';
+import { useNavigate } from 'react-router-dom';
 
 // Fix Leaflet default icon
 delete L.Icon.Default.prototype._getIconUrl;
@@ -145,6 +146,8 @@ const UnavailableDatesCalendar = ({ selectedDates = [], onDatesChange, minDate, 
 };
 
 const HostIndex = () => {
+  const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
     title: '', description: '', price: '', location: '', latitude: '', longitude: '',
     maxdays: '', propertyType: '', capacity: '', roomType: '', bedrooms: '', beds: '',
@@ -158,12 +161,66 @@ const HostIndex = () => {
   const [listingId, setListingId] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState(null);
   const mediaInputRef = useRef(null);
   const uploadContainerRef = useRef(null);
 
   const slides = ['/images/photo1.jpg','/images/photo2.jpg','/images/photo3.jpg','/images/photo4.jpg'];
   const [currentSlide, setCurrentSlide] = useState(0);
   const API_BASE_URL = 'http://localhost:3001';
+
+  // Enhanced logout function
+  const handleLogout = () => {
+    // Clear ALL storage
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Clear cookies if any
+    document.cookie.split(";").forEach(c => {
+      document.cookie = c.replace(/^ +/, "")
+        .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+    
+    // Force redirect to home with full reload
+    window.location.href = '/';
+  };
+
+  // Refresh function to reload listing data
+  const handleRefresh = async () => {
+    if (listingId) {
+      setIsRefreshing(true);
+      try {
+        await fetchListing(listingId);
+        setLastRefresh(new Date());
+        console.log('Listing data refreshed successfully');
+      } catch (error) {
+        console.error('Refresh failed:', error);
+        alert('Failed to refresh listing data');
+      } finally {
+        setIsRefreshing(false);
+      }
+    } else {
+      // For new listing form, just reset form and show message
+      setLastRefresh(new Date());
+      alert('Form refreshed. Ready for new listing.');
+    }
+  };
+
+  // Auto-refresh every 30 seconds if editing a listing
+  useEffect(() => {
+    let interval;
+    if (listingId) {
+      interval = setInterval(() => {
+        console.log('Auto-refreshing listing data...');
+        fetchListing(listingId);
+      }, 30000); 
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [listingId]);
 
   const getCurrentUser = () => {
     const user = localStorage.getItem('user') || sessionStorage.getItem('currentUser');
@@ -377,29 +434,77 @@ const HostIndex = () => {
     <>
       <div className="host-top-navbar">
         <div className="host-logo"><h2>ShelterSeek</h2></div>
-        <button
-          onClick={() => setIsMenuOpen(!isMenuOpen)}
-          style={{
-            marginLeft: 'auto',
-            background: 'none',
-            border: 'none',
-            fontSize: '28px',
-            cursor: 'pointer',
-            color: '#333',
-            transition: 'color 0.2s ease',
-          }}
-          onMouseEnter={(e) => (e.target.style.color = '#d72d6e')}
-          onMouseLeave={(e) => (e.target.style.color = '#333')}
-        >
-          <FontAwesomeIcon icon={faUser} />
-        </button>
+        
+        {/* Refresh Button in Navbar */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '1rem',
+          marginLeft: 'auto',
+          marginRight: '1rem'
+        }}>
+          {listingId && (
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: isRefreshing ? '#6b7280' : '#e91e63',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.375rem',
+                cursor: isRefreshing ? 'not-allowed' : 'pointer',
+                fontSize: '0.875rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                opacity: isRefreshing ? 0.7 : 1
+              }}
+              title="Refresh listing data"
+            >
+              <FontAwesomeIcon icon={faSyncAlt} spin={isRefreshing} /> 
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+          )}
+          
+          <button
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '28px',
+              cursor: 'pointer',
+              color: '#333',
+              transition: 'color 0.2s ease',
+            }}
+            onMouseEnter={(e) => (e.target.style.color = '#d72d6e')}
+            onMouseLeave={(e) => (e.target.style.color = '#333')}
+          >
+            <FontAwesomeIcon icon={faUser} />
+          </button>
+        </div>
+        
         {isMenuOpen && (
           <div className="host-user-menu host-open">
             <button className="host-user-close-btn" onClick={() => setIsMenuOpen(false)}>×</button>
             <ul>
               <li><a href="/dashboard">Dashboard</a></li>
               <li><a href="/chat">Chat</a></li>
-              <li><a href="/">Logout</a></li>
+              <li><button onClick={handleLogout} 
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#e91e63',
+                fontSize: '1rem',
+                cursor: 'pointer',
+                padding: 0,
+                transition: 'color 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginLeft: '3rem'
+              }}
+              >Logout</button></li>
             </ul>
           </div>
         )}
@@ -431,7 +536,47 @@ const HostIndex = () => {
 
         <div className="form-container">
           <form onSubmit={handleSubmit}>
-            <h2>{listingId ? 'Edit Listing' : 'Create Listing'}</h2>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              marginBottom: '1.5rem',
+              flexWrap: 'wrap',
+              gap: '1rem'
+            }}>
+              <h2>{listingId ? 'Edit Listing' : 'Create Listing'}</h2>
+              
+              {/* Refresh Status Indicator */}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.75rem',
+                fontSize: '0.875rem',
+                color: '#6b7280'
+              }}>
+                {listingId && (
+                  <>
+                    <div style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: '#10b981',
+                      animation: 'pulse 2s infinite'
+                    }} />
+                    <span>Auto-refreshing every 30s</span>
+                    {lastRefresh && (
+                      <span style={{ 
+                        marginLeft: '0.5rem', 
+                        color: '#e91e63',
+                        fontSize: '0.8rem'
+                      }}>
+                        Last refresh: {lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
 
             <div className="form-group">
               <label>Title</label>
@@ -823,14 +968,54 @@ const HostIndex = () => {
               )}
             </div>
 
-            <button type="submit" className="submit-button" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : (listingId ? 'Update Listing' : 'Submit Listing')}
-            </button>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              marginTop: '2rem',
+              gap: '1rem'
+            }}>
+              <button 
+                type="button" 
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: isRefreshing ? '#6b7280' : '#f3f4f6',
+                  color: '#374151',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '0.375rem',
+                  cursor: isRefreshing ? 'not-allowed' : 'pointer',
+                  fontSize: '0.875rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  opacity: isRefreshing ? 0.7 : 1
+                }}
+              >
+                <FontAwesomeIcon icon={faSyncAlt} spin={isRefreshing} /> 
+                {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+              </button>
+              
+              <button type="submit" className="submit-button" disabled={isSubmitting || isRefreshing}>
+                {isSubmitting ? 'Saving...' : (listingId ? 'Update Listing' : 'Submit Listing')}
+              </button>
+            </div>
           </form>
         </div>
       </div>
 
       <Footer />
+      
+      {/* Add pulse animation CSS */}
+      <style>
+        {`
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+          }
+        `}
+      </style>
     </>
   );
 };

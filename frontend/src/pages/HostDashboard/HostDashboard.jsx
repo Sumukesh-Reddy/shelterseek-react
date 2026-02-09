@@ -207,8 +207,49 @@ const HostDashboard = () => {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [pollingInterval, setPollingInterval] = useState(null);
   const [expandedBookingId, setExpandedBookingId] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshCount, setRefreshCount] = useState(0);
+  const [lastManualRefresh, setLastManualRefresh] = useState(null);
 
+  // Enhanced logout function
+  const handleLogout = () => {
+    // Clear all intervals to stop auto refresh
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      setPollingInterval(null);
+    }
+    
+    // Clear ALL storage
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Clear cookies if any
+    document.cookie.split(";").forEach(c => {
+      document.cookie = c.replace(/^ +/, "")
+        .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+    
+    // Force redirect to home with full reload
+    window.location.href = '/';
+  };
+
+  // Check session on mount
   useEffect(() => {
+    const checkSession = () => {
+      const user = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('currentUser') || 'null');
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      
+      if (!user || !token) {
+        handleLogout();
+        return false;
+      }
+      return true;
+    };
+
+    if (!checkSession()) {
+      return;
+    }
+
     const user = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('currentUser') || 'null');
     if (!user) {
       window.alert('Please login to view the dashboard.');
@@ -220,12 +261,13 @@ const HostDashboard = () => {
     fetchAnalytics();
   }, [navigate]);
 
+  // Auto refresh setup
   useEffect(() => {
     if (currentUser && currentUser.accountType === 'host') {
       // Initial fetch
       fetchHostBookings();
       
-      // Set up polling interval (every 1 second)
+      // Set up auto-refresh interval (every 1 second)
       const interval = setInterval(() => {
         fetchHostBookings();
       }, 1000);
@@ -239,6 +281,7 @@ const HostDashboard = () => {
     }
   }, [currentUser]);
 
+  // Filter listings
   useEffect(() => {
     const filtered = listings.filter(listing => {
       const matchesSearch = !searchTerm ||
@@ -264,6 +307,17 @@ const HostDashboard = () => {
     });
     setFilteredListings(filtered);
   }, [searchTerm, listings, filters]);
+
+  // Auto-refresh analytics every 30 seconds
+  useEffect(() => {
+    const analyticsInterval = setInterval(() => {
+      if (currentUser) {
+        fetchAnalytics();
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(analyticsInterval);
+  }, [currentUser]);
 
   const fetchListings = async (email) => {
     try {
@@ -308,11 +362,36 @@ const HostDashboard = () => {
     }
   };
 
+  // Manual refresh function
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    setRefreshCount(prev => prev + 1);
+    setLastManualRefresh(new Date());
+    
+    try {
+      // Refresh all data in parallel
+      await Promise.all([
+        fetchListings(currentUser?.email),
+        fetchAnalytics(),
+        fetchHostBookings()
+      ]);
+      console.log('Manual refresh completed');
+    } catch (error) {
+      console.error('Manual refresh failed:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleDelete = async (listingId) => {
     if (!window.confirm('Are you sure you want to delete this listing?')) return;
     try {
       await axios.delete(`${API_BASE_URL}/api/listings/${listingId}`);
       setListings(prev => prev.filter(l => l._id !== listingId));
+      // Auto refresh after delete
+      setTimeout(() => {
+        fetchListings(currentUser?.email);
+      }, 500);
     } catch (error) {
       window.alert('Failed to delete listing');
     }
@@ -559,7 +638,8 @@ const HostDashboard = () => {
           <button type="button" onClick={() => handleSectionChange('qr-codes')} style={{ ...styles.navLink, ...(activeSection === 'qr-codes' ? styles.navLinkActive : {}) }}>
             <FontAwesomeIcon icon={faImages} style={styles.navLinkIcon} /> QR Codes
           </button>
-          <button type="button" onClick={() => { localStorage.removeItem('user'); navigate('/loginweb'); }} style={styles.navLink}>
+          {/* Updated Logout Button */}
+          <button type="button" onClick={handleLogout} style={styles.navLink}>
             <FontAwesomeIcon icon={faSignOutAlt} style={styles.navLinkIcon} /> Logout
           </button>
         </nav>
@@ -575,27 +655,66 @@ const HostDashboard = () => {
              activeSection === 'qr-codes' ? 'QR Codes' : 'Overview'}
           </h2>
           
-          <button
-            onClick={() => {
-              fetchHostBookings();
-              fetchAnalytics();
-            }}
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: '#d72d6e',
-              color: 'white',
-              border: 'none',
-              borderRadius: '0.375rem',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}
-          >
-            <FontAwesomeIcon icon={faSyncAlt} /> Refresh Now
-          </button>
+          {/* Refresh Button with Status */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                backgroundColor: pollingInterval ? '#10b981' : '#ef4444',
+                animation: pollingInterval ? 'pulse 1s infinite' : 'none'
+              }} />
+              <span style={{ fontSize: '0.875rem', color: pollingInterval ? '#059669' : '#6b7280' }}>
+                {pollingInterval ? 'Auto-refresh ON' : 'Auto-refresh OFF'}
+              </span>
+            </div>
+            
+            <button
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: isRefreshing ? '#6b7280' : '#d72d6e',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.375rem',
+                cursor: isRefreshing ? 'not-allowed' : 'pointer',
+                fontSize: '0.875rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                opacity: isRefreshing ? 0.7 : 1
+              }}
+            >
+              <FontAwesomeIcon icon={faSyncAlt} spin={isRefreshing} /> 
+              {isRefreshing ? 'Refreshing...' : 'Refresh Now'}
+            </button>
+          </div>
         </div>
+
+        {/* Auto-refresh status indicator */}
+        {lastUpdate && (
+          <div style={{
+            padding: '0.5rem',
+            backgroundColor: '#f0fdf4',
+            borderRadius: '0.375rem',
+            marginBottom: '1rem',
+            fontSize: '0.875rem',
+            color: '#059669',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
+            <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }} />
+            <span>Auto-updating every second • Last update: {lastUpdate.toLocaleTimeString()}</span>
+            {lastManualRefresh && (
+              <span style={{ marginLeft: 'auto', color: '#d72d6e' }}>
+                Manual refresh: {lastManualRefresh.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Overview Section */}
         {activeSection === 'overview' && (
@@ -1030,7 +1149,7 @@ const HostDashboard = () => {
                   backgroundColor: pollingInterval ? '#10b981' : '#ef4444'
                 }} />
                 <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
-                  Auto-refreshing
+                  Auto-refreshing every 30s
                 </span>
               </div>
             </div>

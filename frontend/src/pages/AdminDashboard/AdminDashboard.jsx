@@ -216,14 +216,6 @@ const getCardTypeTextColor = (cardType) => {
       {/* navbar full width */}
       <div className="admin-dashboard-fullwidth">
         <AdminNavbar />
-      </div>
-
-      {/* top title / accent */}
-      <div className="admin-dashboard-fullwidth">
-        <div className="admin-dashboard-title-row">
-          <h2 className="admin-dashboard-title">Dashboard Overview</h2>
-          <span className="admin-dashboard-title-accent" />
-        </div>
         <button
             onClick={handleLogout}
             style={{
@@ -234,11 +226,19 @@ const getCardTypeTextColor = (cardType) => {
               padding: '8px 16px',
               borderRadius: '8px',
               fontWeight: '600',
-              cursor: 'pointer'
+              cursor: 'pointer',
             }}
           >
             Logout
           </button>
+      </div>
+
+      {/* top title / accent */}
+      <div className="admin-dashboard-fullwidth">
+        <div className="admin-dashboard-title-row">
+          <h2 className="admin-dashboard-title">Dashboard Overview</h2>
+          <span className="admin-dashboard-title-accent" />
+        </div>
         {/* Overview cards */}
         <div className="admin-dashboard-overview-row">
           {/* Bookings card */}
