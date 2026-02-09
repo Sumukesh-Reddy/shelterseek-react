@@ -42,7 +42,7 @@ const ChatbotIcon = () => {
           </div>
         </div>
         
-        <div className="chatbot-tooltip">Ask Helo AI Assistant</div>
+        <div className="chatbot-tooltip">Ask ShelterSeek Assistant</div>
         
         {/* Optional: Small notification badge */}
         <div className="ai-notification">
