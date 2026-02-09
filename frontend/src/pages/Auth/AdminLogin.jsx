@@ -28,11 +28,25 @@ const AdminLogin = () => {
         };
 
         // Store in localStorage
-        localStorage.setItem('token', 'admin-token-' + Date.now());
+        const token = 'admin-token-' + Date.now();
+        localStorage.setItem('token', token);
         localStorage.setItem('user', JSON.stringify(adminUser));
+        localStorage.setItem('currentUser', JSON.stringify(adminUser));
         
-        // Redirect to admin page
-        navigate('/admindashboard');
+        // Also store in sessionStorage for consistency
+        sessionStorage.setItem('token', token);
+        sessionStorage.setItem('user', JSON.stringify(adminUser));
+        sessionStorage.setItem('currentUser', JSON.stringify(adminUser));
+        
+        console.log('Admin login successful:', adminUser);
+        console.log('Token stored:', token);
+        
+        // Force a small delay and then redirect
+        setTimeout(() => {
+          navigate('/admindashboard');
+          // Force page reload to ensure auth is recognized
+          window.location.reload();
+        }, 100);
       } else {
         throw new Error('Invalid admin credentials');
       }
@@ -64,7 +78,7 @@ const AdminLogin = () => {
               className="form-input"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter admin email"
+              placeholder="shelterseekrooms@gmail.com"
               required
             />
           </div>
@@ -77,12 +91,17 @@ const AdminLogin = () => {
               className="form-input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter admin password"
+              placeholder="admin123"
               required
             />
           </div>
 
-          <button type="submit" className="auth-button" disabled={loading}>
+          <button 
+            type="submit" 
+            className="auth-button" 
+            disabled={loading}
+            onClick={handleSubmit}
+          >
             {loading ? (
               <>
                 <span className="loading-spinner"></span> Signing in...
