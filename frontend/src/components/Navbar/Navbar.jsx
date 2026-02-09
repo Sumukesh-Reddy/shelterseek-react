@@ -122,7 +122,7 @@ const Navbar = ({ searchKeywords, onSearchChange }) => {
               <div className="user-menu">
                 <button className="user-close-btn" onClick={toggleUserMenu}>×</button>
                 <ul>
-                  <li><Link to="/profile" onClick={closeAllMenus}>Profile</Link></li>
+                  <li><Link to="/traveler/profile" onClick={closeAllMenus}>Profile</Link></li>
                   <li><Link to="/history" onClick={closeAllMenus}>Viewed History</Link></li>
                   <li><Link to="/BookedHistory" onClick={closeAllMenus}>Booked History</Link></li>
                   <li><button onClick={handleLogout} className="logout-button">Logout</button></li>
@@ -147,7 +147,7 @@ const Navbar = ({ searchKeywords, onSearchChange }) => {
               <div className="user-menu">
                 <button className="user-close-btn" onClick={toggleUserMenu}>×</button>
                 <ul>
-                  <li><Link to="/profile" onClick={closeAllMenus}>Profile</Link></li>
+                  <li><Link to="/traveler/profile" onClick={closeAllMenus}>Profile</Link></li>
                   <li><Link to="/history" onClick={closeAllMenus}>Viewed History</Link></li>
                   <li><Link to="/BookedHistory" onClick={closeAllMenus}>Booked History</Link></li>
 
@@ -237,7 +237,7 @@ const Navbar = ({ searchKeywords, onSearchChange }) => {
         <div className="mobile-menu">
           <button className="close-btn" onClick={toggleMobileMenu}>×</button>
           <ul>
-            <li><Link to="/profile" onClick={closeAllMenus}>Profile</Link></li>
+            <li><Link to="/traveler/profile" onClick={closeAllMenus}>Profile</Link></li>
             <li><Link to="/chat" onClick={closeAllMenus}>Inbox</Link></li>
             <li><Link to="/history" onClick={closeAllMenus}>Viewed History</Link></li>
             <li><Link to="/BookedHistory" onClick={closeAllMenus}>Booked History</Link></li>

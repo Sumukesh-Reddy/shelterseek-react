@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const hostController = require('../controllers/hostController');
 const { logError, logRouteError } = require('../utils/errorLogger');
+const { authenticateToken, roleMiddleware } = require('../middleware/authMiddleware');
 
 const upload = multer({ dest: 'public/uploads/' });
 
@@ -53,13 +54,43 @@ const asyncHandler = (fn) => (req, res, next) => {
 };
 
 // Routes with error handling
-router.post('/listings', upload.array('images', 12), multerErrorHandler, asyncHandler(hostController.createListing));
-router.put('/listings/:id', upload.array('images', 12), multerErrorHandler, asyncHandler(hostController.updateListing));
+// Public read-only routes
 router.get('/listings/:id', asyncHandler(hostController.getListingById));
 router.get('/images/:id', asyncHandler(hostController.getImage));
 router.get('/listings', asyncHandler(hostController.getListings));
-router.patch('/listings/:listingId/status', asyncHandler(hostController.updateListingStatus));
-router.delete('/listings/:id', asyncHandler(hostController.deleteListing));
+
+// Host-only mutating routes
+router.post(
+  '/listings',
+  authenticateToken,
+  roleMiddleware.hostOnly,
+  upload.array('images', 12),
+  multerErrorHandler,
+  asyncHandler(hostController.createListing)
+);
+
+router.put(
+  '/listings/:id',
+  authenticateToken,
+  roleMiddleware.hostOnly,
+  upload.array('images', 12),
+  multerErrorHandler,
+  asyncHandler(hostController.updateListing)
+);
+
+router.patch(
+  '/listings/:listingId/status',
+  authenticateToken,
+  roleMiddleware.hostOnly,
+  asyncHandler(hostController.updateListingStatus)
+);
+
+router.delete(
+  '/listings/:id',
+  authenticateToken,
+  roleMiddleware.hostOnly,
+  asyncHandler(hostController.deleteListing)
+);
 
 // Global error handler for this router
 router.use((err, req, res, next) => {

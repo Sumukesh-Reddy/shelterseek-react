@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AdminNavbar from '../../components/AdminNavbar/navbar';
 import './AdminDashboard.css';
-
+import { useAuth } from '../../contexts/AuthContext';
 function AdminDashboard() {
   // data state
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const [totalBookings, setTotalBookings] = useState(0);
   const [thisMonthBookings, setThisMonthBookings] = useState(0);
   const [thisWeekBookings, setThisWeekBookings] = useState(0);
@@ -198,6 +201,10 @@ const getCardTypeTextColor = (cardType) => {
     };
   };
 
+  const handleLogout = () => {
+    logout();
+    navigate('/', { replace: true });
+  };
   const filteredBookings = bookings.filter(b =>
     (b.userName ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (b._id ?? '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -217,7 +224,21 @@ const getCardTypeTextColor = (cardType) => {
           <h2 className="admin-dashboard-title">Dashboard Overview</h2>
           <span className="admin-dashboard-title-accent" />
         </div>
-
+        <button
+            onClick={handleLogout}
+            style={{
+              marginLeft: 'auto',
+              background: '#ef4444',
+              color: 'white',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontWeight: '600',
+              cursor: 'pointer'
+            }}
+          >
+            Logout
+          </button>
         {/* Overview cards */}
         <div className="admin-dashboard-overview-row">
           {/* Bookings card */}

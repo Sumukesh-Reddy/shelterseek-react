@@ -29,6 +29,7 @@ const RoomData = require('./model/Room');
 // At the top of app.js with other requires
 const { MongoClient } = require('mongodb');
 const { GoogleGenAI } = require('@google/genai');
+const { authenticateToken, roleMiddleware } = require('./middleware/authMiddleware');
 
 
 const app = express();
@@ -226,126 +227,6 @@ const errorLogger = (req, res, next) => {
   };
   
   next();
-};
-
-// Role-based access control middleware
-const roleMiddleware = {
-  // Only travelers can access
-  travelerOnly: (req, res, next) => {
-    if (!req.isAuthenticated()) {
-      errorLogger(req, res, () => {});
-      return res.status(401).json({ success: false, message: 'Authentication required' });
-    }
-    
-    if (req.user.accountType !== 'traveller') {
-      // Log unauthorized access attempt
-      const errorLog = {
-        timestamp: new Date().toISOString(),
-        method: req.method,
-        url: req.originalUrl,
-        statusCode: 403,
-        statusMessage: 'Forbidden - Traveler only',
-        userId: req.user._id,
-        userEmail: req.user.email,
-        userAccountType: req.user.accountType,
-        userAgent: req.get('User-Agent'),
-        ip: req.ip || req.connection.remoteAddress,
-        attemptedAccess: 'Traveler-only route',
-        violation: 'Role violation'
-      };
-      
-      // Write to error log
-      errorLogStream.write(JSON.stringify(errorLog) + '\n');
-      
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Access denied: Traveler only' 
-      });
-    }
-    
-    next();
-  },
-  
-  // Only hosts can access
-  hostOnly: (req, res, next) => {
-    if (!req.isAuthenticated()) {
-      errorLogger(req, res, () => {});
-      return res.status(401).json({ success: false, message: 'Authentication required' });
-    }
-    
-    if (req.user.accountType !== 'host') {
-      // Log unauthorized access attempt
-      const errorLog = {
-        timestamp: new Date().toISOString(),
-        method: req.method,
-        url: req.originalUrl,
-        statusCode: 403,
-        statusMessage: 'Forbidden - Host only',
-        userId: req.user._id,
-        userEmail: req.user.email,
-        userAccountType: req.user.accountType,
-        userAgent: req.get('User-Agent'),
-        ip: req.ip || req.connection.remoteAddress,
-        attemptedAccess: 'Host-only route',
-        violation: 'Role violation'
-      };
-      
-      // Write to error log
-      errorLogStream.write(JSON.stringify(errorLog) + '\n');
-      
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Access denied: Host only' 
-      });
-    }
-    
-    next();
-  },
-  
-  // Only admin can access
-  adminOnly: (req, res, next) => {
-    if (!req.isAuthenticated()) {
-      errorLogger(req, res, () => {});
-      return res.status(401).json({ success: false, message: 'Authentication required' });
-    }
-    
-    if (req.user.accountType !== 'admin') {
-      // Log unauthorized access attempt
-      const errorLog = {
-        timestamp: new Date().toISOString(),
-        method: req.method,
-        url: req.originalUrl,
-        statusCode: 403,
-        statusMessage: 'Forbidden - Admin only',
-        userId: req.user._id,
-        userEmail: req.user.email,
-        userAccountType: req.user.accountType,
-        userAgent: req.get('User-Agent'),
-        ip: req.ip || req.connection.remoteAddress,
-        attemptedAccess: 'Admin-only route',
-        violation: 'Role violation'
-      };
-      
-      // Write to error log
-      errorLogStream.write(JSON.stringify(errorLog) + '\n');
-      
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Access denied: Admin only' 
-      });
-    }
-    
-    next();
-  },
-  
-  // Any authenticated user
-  authenticated: (req, res, next) => {
-    if (!req.isAuthenticated()) {
-      errorLogger(req, res, () => {});
-      return res.status(401).json({ success: false, message: 'Authentication required' });
-    }
-    next();
-  }
 };
 
 const otpStore = {};

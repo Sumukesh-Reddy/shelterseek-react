@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useDispatch } from "react-redux";
 import { setUser } from "../../store/slices/userSlice";
+import { useAuth } from '../../contexts/AuthContext';
 import './Login.css';
 
 const HostLogin = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const [step, setStep] = useState(1); // 1: email/password, 2: OTP verification
+  const { login, user } = useAuth();
+
+  const [step, setStep] = useState(1);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -16,6 +19,7 @@ const HostLogin = () => {
   const [success, setSuccess] = useState('');
   const [resendTimer, setResendTimer] = useState(0);
 
+  /* ✅ Auto-redirect if already logged in as host */
   useEffect(() => {
     let timer;
     if (resendTimer > 0) {
@@ -25,22 +29,19 @@ const HostLogin = () => {
   }, [resendTimer]);
 
   const handleOtpChange = (index, value) => {
-    if (value.length > 1) return; // Prevent multiple characters
+    if (value.length > 1) return;
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
 
-    // Auto-focus next input
     if (value && index < 5) {
-      const nextInput = document.getElementById(`otp-${index + 1}`);
-      if (nextInput) nextInput.focus();
+      document.getElementById(`otp-${index + 1}`)?.focus();
     }
   };
 
   const handleOtpKeyDown = (index, e) => {
     if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      const prevInput = document.getElementById(`otp-${index - 1}`);
-      if (prevInput) prevInput.focus();
+      document.getElementById(`otp-${index - 1}`)?.focus();
     }
   };
 
@@ -54,9 +55,8 @@ const HostLogin = () => {
         body: JSON.stringify({ email })
       });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to send OTP');
-      }
+      if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
+
       setSuccess('OTP sent to your email!');
       setResendTimer(60);
       setStep(2);
@@ -67,7 +67,7 @@ const HostLogin = () => {
     }
   };
 
-  const verifyOtp = async () => {
+  const verifyOtpAndLogin = async () => {
     const otpString = otp.join('');
     if (otpString.length !== 6) {
       setError('Please enter complete OTP');
@@ -76,42 +76,32 @@ const HostLogin = () => {
 
     setLoading(true);
     setError('');
+
     try {
-      const res = await fetch('http://localhost:3001/verify-otp', {
+      const otpRes = await fetch('http://localhost:3001/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp: otpString })
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || 'Invalid OTP');
+      const otpData = await otpRes.json();
+      if (!otpRes.ok || !otpData.success) {
+        throw new Error(otpData.message || 'Invalid OTP');
       }
-      setSuccess('OTP verified! Logging you in...');
-      
-      // Now proceed with login
-      const loginRes = await fetch('http://localhost:3001/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const loginData = await loginRes.json();
-      if (!loginRes.ok || !loginData.success) {
-        throw new Error(loginData.message || 'Login failed');
-      }
-      
-      // Check if user is a host
-      if (loginData.user.accountType !== 'host') {
-        throw new Error('This login is for hosts only. Please use the traveler login.');
-      }
-      
-      localStorage.setItem('token', loginData.token);
-      localStorage.setItem('user', JSON.stringify(loginData.user));
 
-      dispatch(setUser(loginData.user));
-      
-      
-      sessionStorage.setItem('currentUser', JSON.stringify(loginData.user));
-      navigate('/host_index');
+      const loginResult = await login(email, password);
+
+      if (!loginResult.success) {
+        throw new Error(loginResult.message || 'Login failed');
+      }
+
+      if (loginResult.user.accountType !== 'host') {
+        throw new Error('This login is for hosts only');
+      }
+
+      dispatch(setUser(loginResult.user));
+      setSuccess('Login successful! Redirecting...');
+      navigate('/host_index', { replace: true });
+
     } catch (err) {
       setError(err.message);
     } finally {
@@ -124,7 +114,7 @@ const HostLogin = () => {
     if (step === 1) {
       await sendOtp();
     } else {
-      await verifyOtp();
+      await verifyOtpAndLogin();
     }
   };
 
@@ -139,13 +129,15 @@ const HostLogin = () => {
         <div className="auth-header">
           <div className="auth-logo">ShelterSeek</div>
           <p className="auth-subtitle">
-            {step === 1 ? 'Welcome back, Host! Sign in to manage your properties' : 'Enter the verification code sent to your email'}
+            {step === 1
+              ? 'Welcome back, Host! Sign in to manage your properties'
+              : 'Enter the verification code sent to your email'}
           </p>
         </div>
 
         <div className="step-indicator">
-          <div className={`step ${step >= 1 ? 'active' : 'inactive'}`}>1</div>
-          <div className={`step ${step >= 2 ? 'active' : 'inactive'}`}>2</div>
+          <div className={`step ${step >= 1 ? 'active' : ''}`}>1</div>
+          <div className={`step ${step >= 2 ? 'active' : ''}`}>2</div>
         </div>
 
         {error && <div className="error-message">{error}</div>}
@@ -154,112 +146,61 @@ const HostLogin = () => {
         <form onSubmit={handleSubmit}>
           {step === 1 ? (
             <>
-              <div className="form-group">
-                <label className="form-label" htmlFor="email">Email Address</label>
-                <input
-                  id="email"
-                  type="email"
-                  className="form-input"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  required
-                />
-              </div>
+              <input
+                type="email"
+                placeholder="Email"
+                className="form-input"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
 
-              <div className="form-group">
-                <label className="form-label" htmlFor="password">Password</label>
-                <input
-                  id="password"
-                  type="password"
-                  className="form-input"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  required
-                />
-                <div style={{ textAlign: 'right', marginTop: '8px' }}>
-                  <Link to="/forgot-password" className="auth-link" style={{ fontSize: '0.9rem' }}>
-                    Forgot Password?
-                  </Link>
-                </div>
-              </div>
+              <input
+                type="password"
+                placeholder="Password"
+                className="form-input"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
 
-              <button type="submit" className="auth-button" disabled={loading}>
-                {loading ? (
-                  <>
-                    <span className="loading-spinner"></span> Sending OTP...
-                  </>
-                ) : (
-                  'Send OTP & Login as Host'
-                )}
+              <button className="auth-button" disabled={loading}>
+                {loading ? 'Sending OTP...' : 'Send OTP'}
               </button>
-
-              <div className="auth-divider">
-                <span>or</span>
-              </div>
-
-              
             </>
           ) : (
             <>
-              <div className="form-group">
-                <label className="form-label">Enter 6-digit code</label>
-                <div className="otp-container">
-                  {otp.map((digit, index) => (
-                    <input
-                      key={index}
-                      id={`otp-${index}`}
-                      type="text"
-                      className="otp-input"
-                      value={digit}
-                      onChange={(e) => handleOtpChange(index, e.target.value)}
-                      onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                      maxLength="1"
-                    />
-                  ))}
-                </div>
+              <div className="otp-container">
+                {otp.map((digit, i) => (
+                  <input
+                    key={i}
+                    id={`otp-${i}`}
+                    value={digit}
+                    maxLength="1"
+                    className="otp-input"
+                    onChange={(e) => handleOtpChange(i, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                  />
+                ))}
               </div>
 
-              <button type="submit" className="auth-button" disabled={loading}>
-                {loading ? (
-                  <>
-                    <span className="loading-spinner"></span> Verifying...
-                  </>
-                ) : (
-                  'Verify & Login as Host'
-                )}
+              <button className="auth-button" disabled={loading}>
+                {loading ? 'Verifying...' : 'Verify & Login'}
               </button>
 
-              <div className="resend-otp">
-                {resendTimer > 0 ? (
-                  <span>Resend OTP in {resendTimer}s</span>
-                ) : (
-                  <button type="button" className="resend-link" onClick={resendOtp}>
-                    Resend OTP
-                  </button>
-                )}
-              </div>
+              {resendTimer > 0 ? (
+                <p>Resend OTP in {resendTimer}s</p>
+              ) : (
+                <button type="button" onClick={resendOtp} className="resend-link">
+                  Resend OTP
+                </button>
+              )}
             </>
           )}
         </form>
 
         <div className="auth-footer">
-          {step === 1 ? (
-            <>
-              Don't have an account? <Link to="/signup" className="auth-link">Sign up as Host</Link>
-              <br />
-              <Link to="/traveler-login" className="auth-link">Login as Traveler instead</Link>
-            </>
-          ) : (
-            <button 
-              type="button" 
-              className="auth-button secondary" 
-              onClick={() => setStep(1)}
-            >
-              Back to Login
-            </button>
-          )}
+          <Link to="/traveler-login">Login as Traveler</Link>
         </div>
       </div>
     </div>

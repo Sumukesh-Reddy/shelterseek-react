@@ -33,53 +33,175 @@ import AdminMapsView from './pages/AdminMaps/AdminMapsView';
 import HostDetails from './pages/AdminNotifications/HostDetails';
 import AdminTrends from './pages/AdminTrends/AdminTrends';
 import TravelerDetails from './pages/AdminNotifications/TravelerDetails';
-import HotelChatbot  from './pages/HotelChatBot/HotelChatbot';
+import HotelChatbot from './pages/HotelChatBot/HotelChatbot';
 import ChatbotIcon from './components/ChatbotIcon/ChatbotIcon';
 import HostRequests from "./pages/HostRequests/HostRequests";
+import ChatPage from './pages/ChatPage/ChatPage';
+import RoleHome from './components/RoleHome';
 import { AuthProvider } from './contexts/AuthContext';
 import { SocketProvider } from './contexts/SocketContext';
-import ChatPage from './pages/ChatPage/ChatPage';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
     <Provider store={store}>
-      <Router>
-        <ChatbotIcon />
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/room/:id" element={<RoomLayout />} />
-          <Route path="/wishlist" element={<Wishlist />} />
-          <Route path="/privacy" element={<PrivacyPolicy />} />
-          <Route path="/message" element={<Message />} />
-          <Route path="/messages" element={<Messages />} />
-          <Route path="/loginweb" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/traveler-login" element={<TravelerLogin />} />
-          <Route path="/host-login" element={<HostLogin />} />
-          <Route path="/loginweb" element={<LoginSelection />} />
-          <Route path="/admin-login" element={<AdminLogin />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/payment" element={<Payment />} />
-          <Route path="/host_index" element={<HostIndex />} />
-          <Route path="/dashboard" element={<HostDashboard />} />
-          <Route path="/hostProfile" element={<HostProfile />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/BookedHistory" element={<BookedHistory />} />
-          <Route path="/AdminDashboard" element={<AdminDashboard />} />
-          <Route path="/admin_notifications" element={<AdminNotifications />} />
-          <Route path="/admin_map" element={<AdminMaps />} />
-          <Route path="/admin/maps/:hostEmail" element={<AdminMapsView />} />
-          <Route path="/host/:email" element={<HostDetails />} />
-          <Route path="/admin_trends" element={<AdminTrends />} />
-          <Route path="/traveler/:email/bookings" element={<TravelerDetails />} />
-          <Route path="/chatbot" element={<HotelChatbot />} />
-          <Route path="/admin/hostrequests" element={<HostRequests />} />
-          <Route path="/chat" element={<AuthProvider><SocketProvider><ChatPage /></SocketProvider></AuthProvider>} />
-        </Routes>
-      </Router>
+      <AuthProvider>
+        <Router>
+          <ChatbotIcon />
+          <Routes>
+
+            {/* Public routes */}
+            {/* <Route
+              path="/"
+              element={
+                <ProtectedRoute allowedRoles={['traveller']}>
+                  <HomePage />
+                </ProtectedRoute>
+              }
+            /> */}
+            <Route path="/" element={<RoleHome />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/room/:id" element={<RoomLayout />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/loginweb" element={<LoginSelection />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/traveler-login" element={<TravelerLogin />} />
+            <Route path="/host-login" element={<HostLogin />} />
+            <Route path="/admin-login" element={<AdminLogin />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/payment" element={<Payment />} />
+            <Route path="/traveler/:email/bookings" element={<TravelerDetails />} />
+            <Route path="/host/:email" element={<HostDetails />} />
+            {/* Traveler-only */}
+            <Route
+              path="/wishlist"
+              element={
+                <ProtectedRoute allowedRoles={['traveller']}>
+                  <Wishlist />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/history"
+              element={
+                <ProtectedRoute allowedRoles={['traveller']}>
+                  <History />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/BookedHistory"
+              element={
+                <ProtectedRoute allowedRoles={['traveller']}>
+                  <BookedHistory />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/traveler/profile"
+              element={
+                <ProtectedRoute allowedRoles={['traveller']}>
+                  <Profile />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Host-only */}
+            {/* Host-only */}
+<Route
+  path="/host_index"
+  element={
+    <ProtectedRoute allowedRoles={['host']}>
+      <HostIndex />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/dashboard"
+  element={
+    <ProtectedRoute allowedRoles={['host']}>
+      <HostDashboard />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/host/Profile"
+  element={
+    <ProtectedRoute allowedRoles={['host']}>
+      <HostProfile />
+    </ProtectedRoute>
+  }
+/>
+
+
+            {/* Admin-only */}
+            <Route
+              path="/admindashboard"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin_notifications"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminNotifications />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin_map"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminMaps />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/maps/:hostEmail"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminMapsView />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin_trends"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminTrends />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/hostrequests"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <HostRequests />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Chat (any authenticated user) */}
+            <Route
+              path="/chat"
+              element={
+                <ProtectedRoute allowedRoles={['traveller', 'host', 'admin']}>
+                  <SocketProvider>
+                    <ChatPage />
+                  </SocketProvider>
+                </ProtectedRoute>
+              }
+            />
+
+          </Routes>
+        </Router>
+      </AuthProvider>
     </Provider>
   );
 }
