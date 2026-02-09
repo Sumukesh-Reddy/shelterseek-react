@@ -168,6 +168,186 @@ const accessLogStream = rfs.createStream('access.log', {
 app.use(helmet());
 
 app.use(morgan('combined', { stream: accessLogStream }));
+
+const errorLogStream = rfs.createStream('error.log', {
+  interval: '1d',
+  path: logDirectory,
+  size: '10M',
+  compress: 'gzip'
+});
+
+// Error logging middleware
+const errorLogger = (req, res, next) => {
+  // Store the original send function
+  const originalSend = res.send;
+  
+  // Override the send function to catch errors
+  res.send = function(body) {
+    // Check if response indicates an error
+    if (res.statusCode >= 400) {
+      const errorLog = {
+        timestamp: new Date().toISOString(),
+        method: req.method,
+        url: req.originalUrl,
+        statusCode: res.statusCode,
+        statusMessage: res.statusMessage,
+        userId: req.user?._id || 'anonymous',
+        userEmail: req.user?.email || '',
+        userAccountType: req.user?.accountType || '',
+        userAgent: req.get('User-Agent'),
+        ip: req.ip || req.connection.remoteAddress,
+        body: req.body,
+        query: req.query,
+        params: req.params,
+        error: body.error || body.message || 'Unknown error',
+        stack: body.stack || null,
+        // Additional role context
+        attemptedRoute: req.originalUrl,
+        isAuthenticated: !!req.user,
+        role: req.user?.accountType || 'unauthenticated'
+      };
+      
+      // Write to error log file
+      errorLogStream.write(JSON.stringify(errorLog) + '\n');
+      
+      // Also log to console in development
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('API Error:', {
+          endpoint: `${req.method} ${req.originalUrl}`,
+          status: res.statusCode,
+          role: req.user?.accountType || 'unauthenticated',
+          error: body.error || body.message
+        });
+      }
+    }
+    
+    // Call the original send function
+    return originalSend.call(this, body);
+  };
+  
+  next();
+};
+
+// Role-based access control middleware
+const roleMiddleware = {
+  // Only travelers can access
+  travelerOnly: (req, res, next) => {
+    if (!req.isAuthenticated()) {
+      errorLogger(req, res, () => {});
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+    
+    if (req.user.accountType !== 'traveller') {
+      // Log unauthorized access attempt
+      const errorLog = {
+        timestamp: new Date().toISOString(),
+        method: req.method,
+        url: req.originalUrl,
+        statusCode: 403,
+        statusMessage: 'Forbidden - Traveler only',
+        userId: req.user._id,
+        userEmail: req.user.email,
+        userAccountType: req.user.accountType,
+        userAgent: req.get('User-Agent'),
+        ip: req.ip || req.connection.remoteAddress,
+        attemptedAccess: 'Traveler-only route',
+        violation: 'Role violation'
+      };
+      
+      // Write to error log
+      errorLogStream.write(JSON.stringify(errorLog) + '\n');
+      
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied: Traveler only' 
+      });
+    }
+    
+    next();
+  },
+  
+  // Only hosts can access
+  hostOnly: (req, res, next) => {
+    if (!req.isAuthenticated()) {
+      errorLogger(req, res, () => {});
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+    
+    if (req.user.accountType !== 'host') {
+      // Log unauthorized access attempt
+      const errorLog = {
+        timestamp: new Date().toISOString(),
+        method: req.method,
+        url: req.originalUrl,
+        statusCode: 403,
+        statusMessage: 'Forbidden - Host only',
+        userId: req.user._id,
+        userEmail: req.user.email,
+        userAccountType: req.user.accountType,
+        userAgent: req.get('User-Agent'),
+        ip: req.ip || req.connection.remoteAddress,
+        attemptedAccess: 'Host-only route',
+        violation: 'Role violation'
+      };
+      
+      // Write to error log
+      errorLogStream.write(JSON.stringify(errorLog) + '\n');
+      
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied: Host only' 
+      });
+    }
+    
+    next();
+  },
+  
+  // Only admin can access
+  adminOnly: (req, res, next) => {
+    if (!req.isAuthenticated()) {
+      errorLogger(req, res, () => {});
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+    
+    if (req.user.accountType !== 'admin') {
+      // Log unauthorized access attempt
+      const errorLog = {
+        timestamp: new Date().toISOString(),
+        method: req.method,
+        url: req.originalUrl,
+        statusCode: 403,
+        statusMessage: 'Forbidden - Admin only',
+        userId: req.user._id,
+        userEmail: req.user.email,
+        userAccountType: req.user.accountType,
+        userAgent: req.get('User-Agent'),
+        ip: req.ip || req.connection.remoteAddress,
+        attemptedAccess: 'Admin-only route',
+        violation: 'Role violation'
+      };
+      
+      // Write to error log
+      errorLogStream.write(JSON.stringify(errorLog) + '\n');
+      
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied: Admin only' 
+      });
+    }
+    
+    next();
+  },
+  
+  // Any authenticated user
+  authenticated: (req, res, next) => {
+    if (!req.isAuthenticated()) {
+      errorLogger(req, res, () => {});
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+    next();
+  }
+};
+
 const otpStore = {};
 const verifiedEmails = new Set();
 
@@ -437,7 +617,7 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-app.post('/api/traveler/liked-rooms', authenticateToken, async (req, res) => {
+app.post('/api/traveler/liked-rooms', authenticateToken, roleMiddleware.travelerOnly, errorLogger, async (req, res) => {
   if (req.user.accountType !== 'traveller') return res.status(403).json({ success: false, message: 'Traveler only' });
 
   const { roomId, action } = req.body;
@@ -457,13 +637,13 @@ app.post('/api/traveler/liked-rooms', authenticateToken, async (req, res) => {
   res.json({ success: true, likedRooms: traveler.likedRooms });
 });
 
-app.get('/api/traveler/liked-rooms', authenticateToken, async (req, res) => {
+app.get('/api/traveler/liked-rooms', authenticateToken, roleMiddleware.travelerOnly, errorLogger, async (req, res) => {
   if (req.user.accountType !== 'traveller') return res.status(403).json({ success: false, message: 'Traveler only' });
   const traveler = await Traveler.findById(req.user._id);
   res.json({ success: true, likedRooms: traveler?.likedRooms || [] });
 });
 
-app.post('/api/traveler/viewed-rooms', authenticateToken, async (req, res) => {
+app.post('/api/traveler/viewed-rooms', authenticateToken, roleMiddleware.travelerOnly, errorLogger, async (req, res) => {
   if (req.user.accountType !== 'traveller') return res.status(403).json({ success: false, message: 'Traveler only' });
   const { roomId } = req.body;
   if (!roomId) return res.status(400).json({ success: false, message: 'roomId required' });
@@ -478,13 +658,13 @@ app.post('/api/traveler/viewed-rooms', authenticateToken, async (req, res) => {
   res.json({ success: true, viewedRooms: traveler.viewedRooms });
 });
 
-app.get('/api/traveler/viewed-rooms', authenticateToken, async (req, res) => {
+app.get('/api/traveler/viewed-rooms', authenticateToken, roleMiddleware.travelerOnly, errorLogger, async (req, res) => {
   if (req.user.accountType !== 'traveller') return res.status(403).json({ success: false, message: 'Traveler only' });
   const traveler = await Traveler.findById(req.user._id);
   res.json({ success: true, viewedRooms: traveler?.viewedRooms || [] });
 });
 
-app.post('/api/traveler/clear-history', authenticateToken, async (req, res) => {
+app.post('/api/traveler/clear-history', authenticateToken, roleMiddleware.travelerOnly, async (req, res) => {
   if (req.user.accountType !== 'traveller') {
     return res.status(403).json({ success: false, message: 'Traveler only' });
   }
@@ -570,7 +750,7 @@ app.post('/reset-password', async (req, res) => {
   }
 });
 
-app.get('/api/rooms', async (req, res) => {
+app.get('/api/rooms', errorLogger, async (req, res) => {
   try {
     let userId = null;
     const token = req.headers['authorization']?.split(' ')[1];
@@ -741,7 +921,7 @@ function formatDate(dateString) {
   });
 }
 
-app.post('/api/bookings', authenticateToken, async (req, res) => {
+app.post('/api/bookings', authenticateToken, roleMiddleware.travelerOnly, errorLogger, async (req, res) => {
   try {
     const { 
       roomId, 
@@ -1022,7 +1202,7 @@ app.post('/api/bookings', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/bookings/history', authenticateToken, async (req, res) => {
+app.get('/api/bookings/history', authenticateToken, roleMiddleware.travelerOnly, async (req, res) => {
   try {
     if (req.user.accountType !== 'traveller') {
       return res.status(403).json({ success: false, message: 'Only travelers can access booking history' });
@@ -1043,7 +1223,7 @@ app.get('/api/bookings/history', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/bookings/host', authenticateToken, async (req, res) => {
+app.get('/api/bookings/host', authenticateToken, roleMiddleware.hostOnly, async (req, res) => {
   try {
     if (req.user.accountType !== 'host') {
       return res.status(403).json({ success: false, message: 'Only hosts can access host bookings' });
@@ -1064,7 +1244,7 @@ app.get('/api/bookings/host', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/host/analytics', authenticateToken, async (req, res) => {
+app.get('/api/host/analytics', authenticateToken, roleMiddleware.hostOnly, async (req, res) => {
   try {
     if (req.user.accountType !== 'host') {
       return res.status(403).json({ success: false, message: 'Only hosts can access host analytics' });
@@ -1119,7 +1299,7 @@ app.get('/api/host/analytics', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/listings/:listingId/qr', authenticateToken, async (req, res) => {
+app.get('/api/listings/:listingId/qr', authenticateToken, roleMiddleware.hostOnly, async (req, res) => {
   try {
     const { listingId } = req.params;
     console.log('QR Code generation requested for listingId:', listingId);
@@ -1158,7 +1338,7 @@ app.get('/api/listings/:listingId/qr', authenticateToken, async (req, res) => {
   }
 });
 
-app.put('/api/rooms/:roomId/book', authenticateToken, async (req, res) => {
+app.put('/api/rooms/:roomId/book', authenticateToken, roleMiddleware.travelerOnly, async (req, res) => {
   const { booking = true } = req.body;
   const room = await RoomData.findById(req.params.roomId);
   if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
@@ -1810,7 +1990,7 @@ app.get('/api/hosts/:hostId/rooms', async (req, res) => {
   }
 });
 
-app.get('/api/rooms/host/:email', async (req, res) => {
+app.get('/api/rooms/host/:email', authenticateToken, roleMiddleware.hostOnly, async (req, res) => {
   try {
     const { email } = req.params;
     const rooms = await RoomData.find({ email }).lean();
@@ -2627,7 +2807,7 @@ app.post('/api/ai-chat', async (req, res) => {
 // ========== CHAT ROUTES ==========
 
 // Get or Create Direct Chat Room
-app.post('/api/chat/room', authenticateToken, async (req, res) => {
+app.post('/api/chat/room', authenticateToken, roleMiddleware.authenticated, async (req, res) => {
   try {
     const { participantId } = req.body;
 
@@ -2728,7 +2908,7 @@ app.post('/api/chat/room', authenticateToken, async (req, res) => {
 
 // Get User's Chat Rooms
 // In app.js, update the /api/chat/rooms endpoint
-app.get('/api/chat/rooms', authenticateToken, async (req, res) => {
+app.get('/api/chat/rooms', authenticateToken, roleMiddleware.authenticated, async (req, res) => {
   try {
     const rooms = await Room.find({
       participants: req.user._id
@@ -2793,7 +2973,7 @@ app.get('/api/chat/rooms', authenticateToken, async (req, res) => {
 });
 
 // Delete a Chat Room
-app.delete('/api/chat/room/:roomId', authenticateToken, async (req, res) => {
+app.delete('/api/chat/room/:roomId', authenticateToken, roleMiddleware.authenticated, async (req, res) => {
   try {
     const { roomId } = req.params;
 
@@ -2818,7 +2998,7 @@ app.delete('/api/chat/room/:roomId', authenticateToken, async (req, res) => {
 });
 
 // Get Messages for a Room
-app.get('/api/chat/messages/:roomId', authenticateToken, async (req, res) => {
+app.get('/api/chat/messages/:roomId', authenticateToken, roleMiddleware.authenticated, async (req, res) => {
   try {
     const { roomId } = req.params;
     const { page = 1, limit = 50 } = req.query;
@@ -2892,7 +3072,7 @@ app.get('/api/chat/messages/:roomId', authenticateToken, async (req, res) => {
 });
 
 // In app.js, update the search endpoint
-app.get('/api/users/search', authenticateToken, async (req, res) => {
+app.get('/api/users/search', authenticateToken, roleMiddleware.authenticated, async (req, res) => {
   try {
     const { query } = req.query;
 
@@ -2994,7 +3174,7 @@ app.get('/api/users/search', authenticateToken, async (req, res) => {
 });
 
 // In app.js, add a test endpoint
-app.post('/api/test-message', authenticateToken, async (req, res) => {
+app.post('/api/test-message', authenticateToken, roleMiddleware.authenticated, async (req, res) => {
   try {
     const { content, roomId } = req.body;
     
@@ -3275,11 +3455,142 @@ setTimeout(async () => {
 }, 1000);
 
 console.log("[AI] Chat system initialized using /api/rooms endpoint");
-app.delete('/api/users/:id', adminController.deleteUser);
+app.delete('/api/users/:id', authenticateToken, roleMiddleware.adminOnly, adminController.deleteUser);
 
+app.get('/api/error-logs', authenticateToken, roleMiddleware.adminOnly, async (req, res) => {
+  try {
+    const fs = require('fs').promises;
+    const path = require('path');
+    
+    const errorLogPath = path.join(logDirectory, 'error.log');
+    
+    try {
+      const logContent = await fs.readFile(errorLogPath, 'utf8');
+      const lines = logContent.trim().split('\n').filter(line => line);
+      const logs = lines.map(line => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return { raw: line };
+        }
+      });
+      
+      res.json({
+        success: true,
+        count: logs.length,
+        logs: logs.reverse().slice(0, 100) 
+      });
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        res.json({ success: true, count: 0, logs: [], message: 'No error logs yet' });
+      } else {
+        throw err;
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching logs:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch error logs' });
+  }
+});
+
+
+const cleanupOldLogs = () => {
+  const fs = require('fs');
+  const path = require('path');
+  
+  try {
+    const files = fs.readdirSync(logDirectory);
+    const now = Date.now();
+    const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
+    
+    files.forEach(file => {
+      if (file.endsWith('.log') || file.endsWith('.gz')) {
+        const filePath = path.join(logDirectory, file);
+        const stats = fs.statSync(filePath);
+        
+        if (stats.mtimeMs < thirtyDaysAgo) {
+          fs.unlinkSync(filePath);
+          console.log(`Deleted old log file: ${file}`);
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Error cleaning up old logs:', err);
+  }
+};
+
+
+setInterval(cleanupOldLogs, 7 * 24 * 60 * 60 * 1000);
+
+cleanupOldLogs();
+
+console.log('Error logging middleware initialized');
+
+// Test routes to verify role-based access
+app.get('/api/test/traveler-only', authenticateToken, roleMiddleware.travelerOnly, (req, res) => {
+  res.json({ success: true, message: 'Welcome traveler!', user: req.user.email });
+});
+
+app.get('/api/test/host-only', authenticateToken, roleMiddleware.hostOnly, (req, res) => {
+  res.json({ success: true, message: 'Welcome host!', user: req.user.email });
+});
+
+app.get('/api/test/admin-only', authenticateToken, roleMiddleware.adminOnly, (req, res) => {
+  res.json({ success: true, message: 'Welcome admin!', user: req.user.email });
+});
+
+app.get('/api/test/authenticated-only', authenticateToken, roleMiddleware.authenticated, (req, res) => {
+  res.json({ success: true, message: 'Welcome authenticated user!', user: req.user.email });
+});
+
+// 404 error handler for unauthorized route attempts
+app.use((req, res, next) => {
+  // Log 404 errors
+  const errorLog = {
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    url: req.originalUrl,
+    statusCode: 404,
+    statusMessage: 'Not Found',
+    userId: req.user?._id || 'anonymous',
+    userEmail: req.user?.email || '',
+    userAccountType: req.user?.accountType || '',
+    userAgent: req.get('User-Agent'),
+    ip: req.ip || req.connection.remoteAddress,
+    attemptedAccess: 'Invalid route'
+  };
+  
+  errorLogStream.write(JSON.stringify(errorLog) + '\n');
+  
+  res.status(404).json({ success: false, message: 'Route not found' });
+});
+
+// Global error handler middleware
 app.use((err, req, res, next) => {
-  console.error(err.message);
-  res.status(500).json({ error: err.message });
+  console.error('Server error:', err);
+  
+  const errorLog = {
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    url: req.originalUrl,
+    statusCode: 500,
+    statusMessage: 'Internal Server Error',
+    userId: req.user?._id || 'anonymous',
+    userEmail: req.user?.email || '',
+    userAccountType: req.user?.accountType || '',
+    userAgent: req.get('User-Agent'),
+    ip: req.ip || req.connection.remoteAddress,
+    error: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : null
+  };
+  
+  errorLogStream.write(JSON.stringify(errorLog) + '\n');
+  
+  res.status(500).json({ 
+    success: false, 
+    message: 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
 });
 
 server.listen(PORT, () => {
