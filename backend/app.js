@@ -483,20 +483,6 @@ app.post('/logout', (req, res) => {
   res.json({ success: true, message: 'Logged out' });
 });
 
-const authenticateToken = async (req, res, next) => {
-  const token = req.headers['authorization']?.split(' ')[1];
-  if (!token) return res.status(401).json({ success: false, message: 'Token required' });
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'myjwtsecret');
-    const user = await Traveler.findById(decoded.id) || await Host.findById(decoded.id);
-    if (!user) return res.status(401).json({ success: false, message: 'User not found' });
-    req.user = user;
-    next();
-  } catch (err) {
-    res.status(403).json({ success: false, message: 'invalid token' });
-  }
-};
 
 app.post('/api/traveler/liked-rooms', authenticateToken, roleMiddleware.travelerOnly, errorLogger, async (req, res) => {
   if (req.user.accountType !== 'traveller') return res.status(403).json({ success: false, message: 'Traveler only' });
