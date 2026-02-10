@@ -39,6 +39,38 @@
 }
 
 /* ---------------------------------------------------
+    STATUS FILTER
+--------------------------------------------------- */
+.status-filter {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    margin: 0 auto 1.5rem;
+    flex-wrap: wrap;
+}
+
+.status-filter-btn {
+    padding: 0.5rem 1.15rem;
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #2d3748;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.status-filter-btn:hover {
+    background: #edf2f7;
+}
+
+.status-filter-btn.active {
+    background: #2d3748;
+    color: #fff;
+    border-color: #2d3748;
+}
+
+/* ---------------------------------------------------
     SEARCH BAR
 --------------------------------------------------- */
 .search-container {
@@ -114,6 +146,21 @@
     margin-top: 0.2rem;
     font-size: 0.95rem;
     color: #4a5568;
+}
+
+.badge {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 0.5rem;
+    background: #edf2f7;
+    color: #4a5568;
+}
+
+.booked-badge {
+    background: #e6fffa;
+    color: #2c7a7b;
 }
 
 /* ---------------------------------------------------
@@ -299,6 +346,14 @@
     transform: translateY(-2px);
 }
 
+.modal-actions .accept:disabled,
+.modal-actions .reject:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
 /* Dropdown */
 .modal-actions select {
     padding: 0.55rem 0.9rem;
@@ -312,6 +367,16 @@
 .modal-actions select:hover {
     background: #fff;
     border-color: #cbd5e0;
+}
+
+.booked-notice {
+    margin-top: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    background: #e6fffa;
+    color: #285e61;
+    border: 1px solid #b2f5ea;
+    font-weight: 600;
 }
 
 /* ---------------------------------------------------

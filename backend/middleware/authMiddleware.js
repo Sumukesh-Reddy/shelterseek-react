@@ -30,9 +30,6 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-// Helper to determine if a request is authenticated
-// Works with both Passport sessions (req.isAuthenticated)
-// and JWT-based auth (req.user set by authenticateToken)
 const isRequestAuthenticated = (req) => {
   if (req.user) return true;
   if (typeof req.isAuthenticated === 'function') {

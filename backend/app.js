@@ -1,4 +1,4 @@
-require('dotenv').config();
+  require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const path = require('path');
@@ -39,7 +39,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const limiter = rateLimit({
-  max: 500,
+  max: 10,
   windowMs: 60 * 60 * 1000,
   message: 'Too many requests from this IP',
 });
@@ -64,7 +64,7 @@ const PAYMENT_DB_URI = process.env.PAYMENT_DB_URI || 'mongodb://localhost:27017/
 
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('Main MongoDB connected'))
-  .catch(err => console.error('Main DB connection error:', err));
+  .catch(err => console.error('Main MongoDB connection error:', err));  
 
 const loginDataSchema = new mongoose.Schema({
   name: String,
@@ -108,7 +108,7 @@ global.hostAdminConnection.on('connected', () => {
     hostController.initializeHostModels();
     console.log('Host models initialized');
   } catch (err) {
-    console.error('Failed to initialize host models:', err);
+    logger.error('Error initializing host models:', err);
   }
 });
 
@@ -155,6 +155,7 @@ require('./config/passport')(passport);
 
 const authRoutes = require('./routes/authRoutes');
 const hostRoutes = require('./routes/hostRoutes');
+const { log } = require('console');
 app.use('/auth', authRoutes);
 app.use('/api', hostRoutes);
 
@@ -375,6 +376,7 @@ app.post('/send-otp', async (req, res) => {
     res.json({ success: true, message: 'OTP sent successfully!' });
   } catch (error) {
     if (!isProd) {
+      logger.error('Email send failed, falling back to console OTP:', error.message);
       return res.json({ success: true, message: 'OTP generated (fallback)', otp });
     }
     res.status(500).json({ success: false, error: 'Failed to send OTP' });
@@ -465,6 +467,7 @@ app.post('/login', async (req, res) => {
       res.json({ success: true, message: 'Login successful', token, user: userData });
     });
   } catch (err) {
+    logger.error('Login error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
@@ -547,6 +550,7 @@ app.post('/api/traveler/clear-history', authenticateToken, roleMiddleware.travel
     
     res.json({ success: true, message: 'History cleared successfully' });
   } catch (error) {
+    logger.error('Error clearing history:', error);
     console.error('Error clearing history:', error);
     res.status(500).json({ success: false, message: 'Failed to clear history' });
   }
@@ -590,6 +594,7 @@ app.post('/forgot-password', async (req, res) => {
 
     res.json({ success: true, message: 'Reset email sent' });
   } catch (err) {
+    logger.error('Forgot password error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
@@ -621,7 +626,6 @@ app.get('/api/rooms', errorLogger, async (req, res) => {
   try {
     let userId = null;
     const token = req.headers['authorization']?.split(' ')[1];
-    
     if (token) {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'myjwtsecret');
@@ -630,6 +634,7 @@ app.get('/api/rooms', errorLogger, async (req, res) => {
           userId = user._id.toString();
         }
       } catch (err) {
+        logger.error('Invalid token:', err.message);
       }
     }
 
@@ -1857,7 +1862,7 @@ app.get('/api/hosts/:hostId/rooms', async (req, res) => {
   }
 });
 
-app.get('/api/rooms/host/:email', authenticateToken, roleMiddleware.hostOnly, async (req, res) => {
+app.get('/api/rooms/host/:email', async (req, res) => {
   try {
     const { email } = req.params;
     const rooms = await RoomData.find({ email }).lean();
@@ -3410,6 +3415,149 @@ app.get('/api/test/authenticated-only', authenticateToken, roleMiddleware.authen
   res.json({ success: true, message: 'Welcome authenticated user!', user: req.user.email });
 });
 
+
+app.get('/api/listings', async (req, res) => {
+  try {
+    const listings = await RoomData.find({}).sort({ createdAt: -1 }).lean();
+    
+    res.json({
+      success: true,
+      data: { listings }
+    });
+    
+  } catch (error) {
+    console.error('Error fetching listings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch listings',
+      error: error.message
+    });
+  }
+});
+
+
+app.put('/api/listings/:listingId/status', async (req, res) => {
+  try {
+    const { listingId } = req.params;
+    const { status } = req.body;
+    
+    console.log(`[Status Update - NO AUTH] Updating ${listingId} to ${status}`);
+    
+    if (!listingId || !status) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Listing ID and status are required' 
+      });
+    }
+
+    // Map frontend status to backend status
+    const statusMap = {
+      'pending': 'pending',
+      'Approved': 'verified',
+      'Rejected': 'rejected',
+      'verified': 'verified',
+      'rejected': 'rejected',
+      'approved': 'verified'
+    };
+    
+    const mappedStatus = statusMap[status] || status;
+    
+    console.log(`[Status Update] Mapped status: ${status} -> ${mappedStatus}`);
+    
+    // Find and update the room in RoomData collection
+    const room = await RoomData.findByIdAndUpdate(
+      listingId,
+      { status: mappedStatus },
+      { new: true }
+    );
+    
+    if (!room) {
+      console.log(`[Status Update] Listing ${listingId} not found`);
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Listing not found' 
+      });
+    }
+    
+    console.log(`[Status Update] Successfully updated ${listingId} to ${mappedStatus}`);
+    
+    // Send response
+    res.json({
+      success: true,
+      message: `Listing ${mappedStatus === 'verified' ? 'approved' : mappedStatus === 'rejected' ? 'rejected' : 'updated'} successfully`,
+      data: { 
+        listing: room,
+        _id: room._id,
+        status: room.status
+      }
+    });
+    
+  } catch (error) {
+    console.error('[Status Update] Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update listing status',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+app.patch('/api/listings/:listingId/status', async (req, res) => {
+  try {
+    const { listingId } = req.params;
+    const { status } = req.body;
+    
+    console.log(`[Status Update - PATCH NO AUTH] Updating ${listingId} to ${status}`);
+    
+    if (!listingId || !status) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Listing ID and status are required' 
+      });
+    }
+
+    const statusMap = {
+      'pending': 'pending',
+      'Approved': 'verified',
+      'Rejected': 'rejected',
+      'verified': 'verified',
+      'rejected': 'rejected',
+      'approved': 'verified'
+    };
+    
+    const mappedStatus = statusMap[status] || status;
+    
+    const room = await RoomData.findByIdAndUpdate(
+      listingId,
+      { status: mappedStatus },
+      { new: true }
+    );
+    
+    if (!room) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Listing not found' 
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: `Listing status updated to ${mappedStatus}`,
+      data: { 
+        listing: room,
+        _id: room._id,
+        status: room.status
+      }
+    });
+    
+  } catch (error) {
+    console.error('[Status Update PATCH] Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update listing status'
+    });
+  }
+});
 // 404 error handler for unauthorized route attempts
 app.use((req, res, next) => {
   // Log 404 errors

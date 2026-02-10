@@ -114,23 +114,33 @@ let Listing;
 let gfsBucket;
 let TravelerListing; // model on Admin_Traveler
 
-// Function to initialize models (called from app.js)
-const initializeHostModels = () => {
-  if (!global.hostAdminConnection) {
+const ensureListingModel = () => {
+  if (Listing) return;
+  if (!global.hostAdminConnection || global.hostAdminConnection.readyState !== 1) {
     throw new Error('hostAdminConnection is not ready');
-  }
-  if (!global.gfsBucket) {
-    global.gfsBucket = new GridFSBucket(global.hostAdminConnection.db, { bucketName: 'images' });
   }
 
   Listing = global.hostAdminConnection.model('Listing', listingSchema);
-  gfsBucket = global.gfsBucket;
 
   // Initialize traveler model if Admin_Traveler connection is present
-  if (global.adminTravelerConnection) {
+  if (global.adminTravelerConnection && global.adminTravelerConnection.readyState === 1 && !TravelerListing) {
     // Reuse EXACT schema, only change the collection to RoomDataTraveler
     TravelerListing = global.adminTravelerConnection.model('Listing', listingSchema, 'RoomDataTraveler');
   }
+};
+
+// Function to initialize models (called from app.js)
+const initializeHostModels = () => {
+  ensureListingModel();
+
+  if (!global.gfsBucket) {
+    if (!global.hostAdminConnection.db) {
+      throw new Error('hostAdminConnection db is not ready');
+    }
+    global.gfsBucket = new GridFSBucket(global.hostAdminConnection.db, { bucketName: 'images' });
+  }
+
+  gfsBucket = global.gfsBucket;
 };
 
 // Create listing
@@ -390,7 +400,16 @@ const updateListing = async (req, res) => {
 // Get listing by ID
 const getListingById = async (req, res) => {
   try {
-    if (!Listing) initializeHostModels();
+    if (!Listing) {
+      if (!global.hostAdminConnection || global.hostAdminConnection.readyState !== 1) {
+        return res.status(503).json({
+          success: false,
+          message: 'Database connection not ready. Please try again in a moment.',
+          error: 'hostAdminConnection is not ready'
+        });
+      }
+      ensureListingModel();
+    }
 
     const listing = await Listing.findById(req.params.id);
     if (!listing) {
@@ -441,9 +460,18 @@ const getImage = async (req, res) => {
 // Get all listings (for admin/host)
 const getListings = async (req, res) => {
   try {
-    if (!Listing) initializeHostModels();
+    if (!Listing) {
+      if (!global.hostAdminConnection || global.hostAdminConnection.readyState !== 1) {
+        return res.status(503).json({
+          success: false,
+          message: 'Database connection not ready. Please try again in a moment.',
+          error: 'hostAdminConnection is not ready'
+        });
+      }
+      ensureListingModel();
+    }
 
-    const listings = await Listing.find().sort({ createdAt: -1 });
+    const listings = await Listing.find({}).sort({ createdAt: -1 });
     res.json({
       success: true,
       data: { listings }
@@ -461,7 +489,16 @@ const getListings = async (req, res) => {
 // Update listing status
 const updateListingStatus = async (req, res) => {
   try {
-    if (!Listing) initializeHostModels();
+    if (!Listing) {
+      if (!global.hostAdminConnection || global.hostAdminConnection.readyState !== 1) {
+        return res.status(503).json({
+          success: false,
+          message: 'Database connection not ready. Please try again in a moment.',
+          error: 'hostAdminConnection is not ready'
+        });
+      }
+      ensureListingModel();
+    }
 
     const { status } = req.body;
     if (!status) {
