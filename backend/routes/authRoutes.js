@@ -79,7 +79,12 @@ router.post('/logout', (req, res) => {
       res.json({ success: true, message: 'Logged out successfully' });
     });
   } catch (error) {
-    
+    logger.error('Logout error', {
+      file: 'authRoutes.js',
+      userId: req.user?._id,
+      error: error.message,
+      stack: error.stack
+    });
   }
 });
 

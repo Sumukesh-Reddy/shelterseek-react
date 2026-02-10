@@ -73,6 +73,8 @@ function App() {
             <Route path="/payment" element={<Payment />} />
             <Route path="/traveler/:email/bookings" element={<TravelerDetails />} />
             <Route path="/host/:email" element={<HostDetails />} />
+            <Route path="/bookedhistory" element={<BookedHistory />} />
+            {/* <Route path="/admin/hostrequests" element={<HostRequests />} /> */}
             {/* Traveler-only */}
             <Route
               path="/wishlist"
@@ -90,14 +92,14 @@ function App() {
                 </ProtectedRoute>
               }
             />
-            <Route
+            {/* <Route
               path="/BookedHistory"
               element={
                 <ProtectedRoute allowedRoles={['traveller']}>
                   <BookedHistory />
                 </ProtectedRoute>
               }
-            />
+            /> */}
             <Route
               path="/traveler/profile"
               element={
